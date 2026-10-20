@@ -85,6 +85,19 @@ owner_of() {
   lower "${path%%/*}"
 }
 
+# Credentials that bypass this workspace's gh login: a token or user:password in a
+# URL, or a custom HTTP auth header (including one passed with `git -c`).
+has_credentials() {
+  case "$1" in
+    *ghp_*|*github_pat_*|*gho_*|*ghu_*|*ghs_*|*ghr_*|*x-access-token*) return 0 ;;
+    *://*:*@*) return 0 ;;
+  esac
+  return 1
+}
+if [ -n "$(git config --get-regexp '^http\..*extraheader$' 2>/dev/null)" ]; then
+  fail "An http.extraHeader is set, which could authenticate as a different account."
+fi
+
 # Check the configured URL(s) *and* the effective one: a `url.*.insteadOf` rewrite
 # must not be able to redirect a push to another owner.
 remote_name=$1
@@ -92,6 +105,9 @@ push_url=$2
 urls=$(git config --get-all "remote.$remote_name.pushurl" 2>/dev/null || git config --get-all "remote.$remote_name.url" 2>/dev/null || true)
 github_targets=0
 for url in $urls "$push_url"; do
+  if has_credentials "$url"; then
+    fail "The push URL contains a credential. Remove it from the remote (and revoke the token on GitHub)."
+  fi
   owner=$(owner_of "$url")
   [ -n "$owner" ] || continue
   github_targets=$((github_targets + 1))

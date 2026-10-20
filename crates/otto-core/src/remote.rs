@@ -52,6 +52,25 @@ pub fn parse_github_remote(url: &str) -> Option<GithubRemote> {
     })
 }
 
+/// GitHub token prefixes (classic, fine-grained, OAuth, user-to-server, server, refresh).
+pub const TOKEN_PREFIXES: &[&str] = &["ghp_", "github_pat_", "gho_", "ghu_", "ghs_", "ghr_"];
+
+/// True if `text` looks like it carries a secret: a GitHub token, or `user:password@`
+/// inside a URL. Used to refuse remotes and config that would authenticate as
+/// someone other than the workspace (embedded credentials bypass the gh helper).
+pub fn contains_credentials(text: &str) -> bool {
+    if TOKEN_PREFIXES.iter().any(|p| text.contains(p)) || text.contains("x-access-token") {
+        return true;
+    }
+    // scheme://user:secret@host
+    text.split("://").skip(1).any(|rest| {
+        let authority = rest.split('/').next().unwrap_or("");
+        authority
+            .rsplit_once('@')
+            .is_some_and(|(userinfo, _)| userinfo.contains(':'))
+    })
+}
+
 fn is_github_host(host: &str) -> bool {
     host.eq_ignore_ascii_case("github.com") || host.eq_ignore_ascii_case("www.github.com")
 }
@@ -79,6 +98,26 @@ mod tests {
             "git://github.com/mhlauf1/otto",
         ] {
             assert_eq!(owner(url).as_deref(), Some("mhlauf1"), "{url}");
+        }
+    }
+
+    #[test]
+    fn detects_embedded_credentials() {
+        for url in [
+            "https://ghp_abcdefghijklmnopqrstuvwxyz0123456789@github.com/mhlauf1/lauf.git",
+            "https://x-access-token:abc@github.com/mhlauf1/otto.git",
+            "https://mikelauf:hunter2@github.com/mhlauf1/otto.git",
+            "https://github_pat_11ABC@github.com/a/b",
+        ] {
+            assert!(contains_credentials(url), "{url}");
+        }
+        for url in [
+            "https://github.com/mhlauf1/otto.git",
+            "https://mhlauf1@github.com/mhlauf1/otto.git",
+            "git@github.com:mhlauf1/otto.git",
+            "ssh://git@github.com:22/mhlauf1/otto.git",
+        ] {
+            assert!(!contains_credentials(url), "{url}");
         }
     }
 

@@ -45,6 +45,12 @@ All guarantees are tested in `crates/otto-core/tests/isolation.rs`, which runs a
 - **R1.** Agent shells source the user's rc files: Claude's shell snapshot reads `~/.zshrc`, and Codex runs a login shell. Mitigations: a `CLAUDE_CODE_SHELL` wrapper, plus an Identity Doctor warning when rc files export secrets.
 - **R2.** Both GitHub accounts may be collaborators on each other's repos, which would make credentials alone insufficient. Mitigation: owner allowlist checks when a repo opens, before each task runs, and in `pre-push`.
 
+## Incidents
+
+| Date       | What                                                                                                                                                                                                 | Action                                                                                                                                           |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 2026-10-20 | A scan of Mike's Desktop found a GitHub token (mhlauf1) embedded in `~/Desktop/lauf/dev/port-v1`'s remote URL, in plaintext in `.git/config`. It was also printed in a Claude Code session's output. | Stripped from the remote with Mike's approval. **Mike to revoke the token on GitHub.** Otto now refuses such repos and blocks such pushes (G10). |
+
 ## Dependency audit exceptions
 
 | Date       | Advisory                                                                                                                                                     | Path                                        | Why accepted                                                                                                                             | Revisit            |

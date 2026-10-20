@@ -667,3 +667,76 @@ fn t4_two_pty_sessions_run_side_by_side_as_different_identities() {
     assert!(b.contains("who=mhlauf1@gmail.com"), "{b}");
     assert!(b.contains("/workspaces/lauf/claude"));
 }
+
+// ── Credentials that bypass the workspace login (found in Mike's repos, 2026-10-20) ──
+
+#[test]
+fn t1_a_token_in_the_remote_url_is_refused_and_cannot_push() {
+    let w = World::new();
+    let env = w.env(&w.lauf);
+    let (work, bare) = w.repo(&w.lauf, "mhlauf1");
+    // A token embedded in an otherwise-allowed remote would push as *that token's* account.
+    let url = "https://ghp_FAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKE1234@github.com/mhlauf1/project.git";
+    git_ok(&env, &work, &["remote", "set-url", "origin", url]);
+    git_ok(
+        &env,
+        &work,
+        &["config", &format!("url.{}.insteadOf", bare.display()), url],
+    );
+    let refused = verify_repo(&w.lauf, &w.layout(&w.lauf), &env, &work).unwrap_err();
+    assert!(
+        matches!(refused, RepoRefusal::SecretInConfig(_)),
+        "{refused:?}"
+    );
+    let out = git(&env, &work, &["push", "-q", "origin", "HEAD:main"]);
+    assert!(!out.status.success());
+    assert!(
+        stderr(&out).contains("contains a credential"),
+        "{}",
+        stderr(&out)
+    );
+    assert!(!has_branch(&bare, &env));
+}
+
+#[test]
+fn t1_an_http_auth_header_cannot_be_used_to_push() {
+    let w = World::new();
+    let env = w.env(&w.lauf);
+    let (work, bare) = w.repo(&w.lauf, "mhlauf1");
+    // Repo config…
+    git_ok(
+        &env,
+        &work,
+        &[
+            "config",
+            "http.https://github.com/.extraheader",
+            "AUTHORIZATION: basic eA==",
+        ],
+    );
+    let refused = verify_repo(&w.lauf, &w.layout(&w.lauf), &env, &work).unwrap_err();
+    assert!(
+        matches!(refused, RepoRefusal::AuthHeaderOverride(_)),
+        "{refused:?}"
+    );
+    git_ok(
+        &env,
+        &work,
+        &["config", "--unset", "http.https://github.com/.extraheader"],
+    );
+    // …or passed on the command line with `git -c`.
+    let out = git(
+        &env,
+        &work,
+        &[
+            "-c",
+            "http.extraHeader=AUTHORIZATION: basic eA==",
+            "push",
+            "-q",
+            "origin",
+            "HEAD:main",
+        ],
+    );
+    assert!(!out.status.success());
+    assert!(stderr(&out).contains("extraHeader"), "{}", stderr(&out));
+    assert!(!has_branch(&bare, &env));
+}

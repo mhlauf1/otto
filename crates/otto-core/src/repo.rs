@@ -8,7 +8,7 @@ use serde::Serialize;
 use specta::Type;
 
 use crate::env::IsolatedEnv;
-use crate::remote::parse_github_remote;
+use crate::remote::{contains_credentials, parse_github_remote};
 use crate::workspace::{Workspace, WorkspaceLayout};
 
 /// Why a repo can't open in a workspace. Each message is shown to Mike as-is.
@@ -29,6 +29,14 @@ pub enum RepoRefusal {
     HooksOverridden,
     #[error("This repo sets its own credential helper, which could push as a different account.")]
     CredentialHelperOverridden,
+    #[error(
+        "This repo's git config contains a credential ({0}). It could push as a different account. Remove it, and revoke the token on GitHub."
+    )]
+    SecretInConfig(String),
+    #[error(
+        "This repo sends its own HTTP auth header ({0}), which could push as a different account."
+    )]
+    AuthHeaderOverride(String),
     #[error("This repo is already registered to the {0} workspace.")]
     BelongsToOtherWorkspace(String),
     #[error("Git failed: {0}")]
@@ -92,6 +100,19 @@ pub fn verify_repo(
     )?;
     if !helpers.is_empty() {
         return Err(RepoRefusal::CredentialHelperOverridden);
+    }
+
+    // Anything that could authenticate as someone else: embedded tokens or
+    // user:password URLs anywhere in repo config, and custom HTTP auth headers.
+    let (_, local) = git(env, &root, &["config", "--local", "--list"])?;
+    for line in local.lines() {
+        let key = line.split('=').next().unwrap_or("");
+        if contains_credentials(line) {
+            return Err(RepoRefusal::SecretInConfig(key.to_owned()));
+        }
+        if key.starts_with("http.") && key.ends_with("extraheader") {
+            return Err(RepoRefusal::AuthHeaderOverride(key.to_owned()));
+        }
     }
 
     // Every remote URL (fetch and push) must be a GitHub repo owned by an allowlisted owner.
