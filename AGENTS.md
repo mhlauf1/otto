@@ -46,4 +46,6 @@ Requires Node from `.nvmrc` (`nvm use`), pnpm 10 and Rust from `rust-toolchain.t
 | `pnpm icons`                               | Regenerate app icons from `src/assets/brand/app-icon.svg`              |
 | `pnpm build`                               | Release `.app` and `.dmg`                                              |
 
+**Don't run the dev build and the installed Otto.app at the same time.** They share `~/Library/Application Support/Otto` (database, hooks, logins).
+
 Generated files are committed and checked by tests: `src/design/tokens.css`, `src/bindings.ts`.
