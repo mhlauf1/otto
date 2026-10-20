@@ -21,7 +21,11 @@ interface SessionsState {
   sessions: LiveSession[];
   /** Selected session per workspace. A missing key means the workspace home view. */
   activeByWorkspace: Record<string, string | undefined>;
-  open: (workspaceId: string, agent: AgentKind, signIn?: boolean) => Promise<LiveSession>;
+  open: (
+    workspaceId: string,
+    agent: AgentKind,
+    options?: { signIn?: boolean; projectPath?: string | undefined },
+  ) => Promise<LiveSession>;
   close: (id: string) => void;
   select: (workspaceId: string, id: string | undefined) => void;
   /** Called when a session ends (e.g. a sign-in flow finishes). */
@@ -50,7 +54,8 @@ export const useSessions = create<SessionsState>((set, get) => ({
   sessions: [],
   activeByWorkspace: {},
 
-  open: async (workspaceId, agent, signIn = false) => {
+  open: async (workspaceId, agent, options = {}) => {
+    const signIn = options.signIn ?? false;
     const { term, fit } = newTerminal();
     const channel = new Channel<PtyEvent>();
     let id = '';
@@ -69,7 +74,15 @@ export const useSessions = create<SessionsState>((set, get) => ({
       if (ended) get().onExit?.(ended);
     };
 
-    const result = await commands.openSession(workspaceId, agent, signIn, 100, 30, channel);
+    const result = await commands.openSession(
+      workspaceId,
+      agent,
+      signIn,
+      options.projectPath ?? null,
+      100,
+      30,
+      channel,
+    );
     if (result.status === 'error') {
       term.dispose();
       throw new SessionError(result.error.message);

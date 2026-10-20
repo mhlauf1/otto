@@ -17,6 +17,8 @@ pub struct SessionInfo {
     pub agent: AgentKind,
     pub title: String,
     pub sign_in: bool,
+    /// The project the session runs in; `None` means the home folder.
+    pub project_path: Option<String>,
 }
 
 struct Live {

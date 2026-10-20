@@ -22,6 +22,8 @@ pub fn ipc() -> Builder<tauri::Wry> {
         commands::list_workspaces,
         commands::run_identity_doctor,
         commands::register_repo,
+        commands::discover_projects,
+        commands::list_projects,
         commands::open_session,
         commands::write_session,
         commands::resize_session,

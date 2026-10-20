@@ -7,6 +7,7 @@ import { Composer } from '../composer/Composer';
 import { DoctorPanel } from '../doctor/DoctorPanel';
 import { CommandPalette, type PaletteAction } from '../palette/CommandPalette';
 import { SessionError, useSessions } from '../sessions/registry';
+import { ImportProjects } from '../projects/ImportProjects';
 import { NewSessionMenu } from '../sessions/NewSessionMenu';
 import { TerminalView } from '../sessions/TerminalView';
 import { useWorkspaceUi } from '../state/workspace';
@@ -17,6 +18,7 @@ import {
   useAllDoctors,
   useAppInfo,
   useDoctor,
+  useProjects,
   useWorkspaces,
 } from './queries';
 
@@ -36,13 +38,19 @@ const NEW_SESSION: { agent: AgentKind; label: string }[] = [
 export function App() {
   const workspaces = useWorkspaces();
   const list = useMemo(() => workspaces.data ?? [], [workspaces.data]);
-  const { activeId, setActive, inspectorOpen, toggleInspector } = useWorkspaceUi();
+  const { activeId, setActive, inspectorOpen, toggleInspector, projectByWorkspace, setProject } =
+    useWorkspaceUi();
   const activeIndex = Math.max(
     0,
     list.findIndex((w) => w.id === activeId),
   );
   const active = list[activeIndex];
   const doctors = useAllDoctors(list);
+  const projects = useProjects(active?.id);
+  const [importOpen, setImportOpen] = useState(false);
+  const activeProject = active
+    ? (projects.data ?? []).find((p) => p.path === projectByWorkspace[active.id])
+    : undefined;
   const doctor = useDoctor(active?.id);
   const queryClient = useQueryClient();
 
@@ -66,9 +74,11 @@ export function App() {
   }, [queryClient]);
 
   const startSession = async (workspaceId: string, agent: AgentKind, signIn = false) => {
+    // Sign-in flows run in the home folder; work sessions open in the selected project.
+    const projectPath = signIn ? undefined : projectByWorkspace[workspaceId];
     setSessionError(null);
     try {
-      await open(workspaceId, agent, signIn);
+      await open(workspaceId, agent, { signIn, projectPath });
     } catch (e) {
       setSessionError(e instanceof SessionError ? e.message : 'Couldn’t start the session.');
     }
@@ -172,6 +182,24 @@ export function App() {
         },
       };
     }),
+    ...(projects.data ?? []).map((p) => ({
+      id: `project-${p.path}`,
+      group: `${active.name} projects`,
+      label: `Use project ${p.name}`,
+      keywords: 'open cd folder repo',
+      run: () => {
+        setProject(active.id, p.path);
+      },
+    })),
+    {
+      id: 'import-projects',
+      group: `${active.name} projects`,
+      label: 'Import projects…',
+      keywords: 'add discover scan repos folder',
+      run: () => {
+        setImportOpen(true);
+      },
+    },
     {
       id: 'doctor',
       group: 'Identity',
@@ -224,6 +252,49 @@ export function App() {
           </ul>
         </nav>
 
+        <nav aria-label={`${active.name} projects`}>
+          <p className={styles.sectionLabel}>Projects</p>
+          <ul className={styles.list}>
+            <li>
+              <button
+                type="button"
+                className={styles.row}
+                aria-current={activeProject === undefined ? 'true' : undefined}
+                onClick={() => {
+                  setProject(active.id, undefined);
+                }}
+              >
+                <span className={styles.rowName}>No project (home folder)</span>
+              </button>
+            </li>
+            {(projects.data ?? []).map((p) => (
+              <li key={p.path}>
+                <button
+                  type="button"
+                  className={styles.row}
+                  aria-current={p.path === activeProject?.path ? 'true' : undefined}
+                  title={p.remoteUrl ?? `${p.path} (local only, pushes locked)`}
+                  onClick={() => {
+                    setProject(active.id, p.path);
+                  }}
+                >
+                  <span className={styles.rowName}>{p.name}</span>
+                  {p.remoteUrl === null ? <span className={styles.localOnly}>local</span> : null}
+                </button>
+              </li>
+            ))}
+          </ul>
+          <button
+            type="button"
+            className={styles.subtleButton}
+            onClick={() => {
+              setImportOpen(true);
+            }}
+          >
+            Import projects…
+          </button>
+        </nav>
+
         <nav aria-label={`${active.name} sessions`}>
           <p className={styles.sectionLabel}>Sessions</p>
           <ul className={styles.list}>
@@ -261,7 +332,7 @@ export function App() {
             ))}
           </ul>
           <NewSessionMenu
-            workspaceName={active.name}
+            workspaceName={activeProject ? `${active.name} · ${activeProject.name}` : active.name}
             onPick={(agent) => {
               void startSession(active.id, agent);
             }}
@@ -353,6 +424,7 @@ export function App() {
       </main>
 
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} actions={paletteActions} />
+      <ImportProjects open={importOpen} onOpenChange={setImportOpen} workspaces={list} />
 
       {inspectorOpen ? (
         <DoctorPanel

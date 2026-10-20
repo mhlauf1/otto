@@ -13,13 +13,23 @@ export const commands = {
 	 *  and log it to the audit trail.
 	 */
 	runIdentityDoctor: (workspaceId: string) => typedError<DoctorReport, CommandError>(__TAURI_INVOKE("run_identity_doctor", { workspaceId })),
-	/**  Check and register a repo for a workspace (SPEC §4.2). */
-	registerRepo: (workspaceId: string, path: string) => typedError<VerifiedRepo, CommandError>(__TAURI_INVOKE("register_repo", { workspaceId, path })),
+	/**
+	 *  Register a repo to a workspace (SPEC §4.2). `local_only` means Mike chose the
+	 *  workspace for a repo with no remote; pushes stay locked until a matching remote exists.
+	 */
+	registerRepo: (workspaceId: string, path: string, localOnly: boolean) => typedError<VerifiedRepo, CommandError>(__TAURI_INVOKE("register_repo", { workspaceId, path, localOnly })),
+	/**
+	 *  Find git repos under `roots` (default: Desktop, Developer, Projects, code, dev, src)
+	 *  and suggest a workspace for each from its GitHub owner.
+	 */
+	discoverProjects: (roots: string[] | null) => typedError<DiscoveredRepo[], CommandError>(__TAURI_INVOKE("discover_projects", { roots })),
+	listProjects: (workspaceId: string) => typedError<Project[], CommandError>(__TAURI_INVOKE("list_projects", { workspaceId })),
 	/**
 	 *  Open an agent (or shell) in a real terminal inside the workspace's isolated
-	 *  environment. Output streams to `on_event`. With `sign_in`, runs the CLI's own login flow.
+	 *  environment, optionally inside one of its projects. Output streams to `on_event`.
+	 *  With `sign_in`, runs the CLI's own login flow.
 	 */
-	openSession: (workspaceId: string, agent: AgentKind, signIn: boolean, cols: number, rows: number, onEvent: Channel<PtyEvent>) => typedError<SessionInfo, CommandError>(__TAURI_INVOKE("open_session", { workspaceId, agent, signIn, cols, rows, onEvent })),
+	openSession: (workspaceId: string, agent: AgentKind, signIn: boolean, projectPath: string | null, cols: number, rows: number, onEvent: Channel<PtyEvent>) => typedError<SessionInfo, CommandError>(__TAURI_INVOKE("open_session", { workspaceId, agent, signIn, projectPath, cols, rows, onEvent })),
 	/**  Keystrokes, paste and dictation all arrive here. */
 	writeSession: (id: string, data: string) => typedError<null, CommandError>(__TAURI_INVOKE("write_session", { id, data })),
 	resizeSession: (id: string, cols: number, rows: number) => typedError<null, CommandError>(__TAURI_INVOKE("resize_session", { id, cols, rows })),
@@ -66,6 +76,15 @@ export type CommandError = { kind: "invalid"; message: string } | { kind: "notFo
 /**  A repo failed an isolation check. The message says which and why. */
 { kind: "refused"; message: string } | { kind: "internal"; message: string };
 
+export type DiscoveredRepo = {
+	path: string,
+	name: string,
+	remoteUrl: string | null,
+	suggestion: Suggestion,
+	/**  The workspace this repo is already registered to, if any (filled in by the caller). */
+	registeredTo: string | null,
+};
+
 export type DoctorReport = {
 	workspaceId: string,
 	checks: Check[],
@@ -85,6 +104,13 @@ export type Identity = {
 	githubUser: GithubOwner,
 };
 
+/**  A project registered to a workspace. */
+export type Project = {
+	path: string,
+	name: string,
+	remoteUrl: string | null,
+};
+
 /**  What a session sends to the UI. */
 export type PtyEvent = 
 /**  Terminal output, always valid UTF-8 (characters split across reads are held back). */
@@ -98,7 +124,20 @@ export type SessionInfo = {
 	agent: AgentKind,
 	title: string,
 	signIn: boolean,
+	/**  The project the session runs in; `None` means the home folder. */
+	projectPath: string | null,
 };
+
+/**  What Otto suggests for a discovered repo. */
+export type Suggestion = 
+/**  Every remote is owned by this workspace's allowlist. */
+{ kind: "workspace"; workspace: string } | 
+/**  No GitHub remote: Mike picks the workspace, and pushes stay locked until a matching remote exists. */
+{ kind: "needsChoice" } | 
+/**  The remote belongs to an owner no workspace allows (e.g. a tutorial repo). */
+{ kind: "notYours"; owners: string[] } | 
+/**  The repo can't be opened: a credential in its config, or a non-GitHub remote. */
+{ kind: "blocked"; reason: string };
 
 /**  The single restrained accent each workspace gets (SPEC §6.1). Maps to `workspaceAccent` tokens. */
 export type Tint = "cobalt" | "jade";
@@ -106,7 +145,8 @@ export type Tint = "cobalt" | "jade";
 /**  A repo that passed every check, ready to register. */
 export type VerifiedRepo = {
 	path: string,
-	remoteUrl: string,
+	/**  `None` for a local-only repo (no remote yet). */
+	remoteUrl: string | null,
 };
 
 export type Workspace = {

@@ -48,7 +48,17 @@ pub enum RepoRefusal {
 #[serde(rename_all = "camelCase")]
 pub struct VerifiedRepo {
     pub path: String,
-    pub remote_url: String,
+    /// `None` for a local-only repo (no remote yet).
+    pub remote_url: Option<String>,
+}
+
+/// Whether a repo without any remote may open.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RemotePolicy {
+    RequireGithubRemote,
+    /// Mike explicitly assigned this repo to the workspace. Pushes stay locked by the
+    /// hooks until a remote owned by this workspace exists.
+    AllowLocalOnly,
 }
 
 fn git(env: &IsolatedEnv, repo: &Path, args: &[&str]) -> Result<(bool, String), RepoRefusal> {
@@ -71,6 +81,7 @@ pub fn verify_repo(
     layout: &WorkspaceLayout,
     env: &IsolatedEnv,
     path: &Path,
+    policy: RemotePolicy,
 ) -> Result<VerifiedRepo, RepoRefusal> {
     let display = path.display().to_string();
     let (ok, top) = git(env, path, &["rev-parse", "--show-toplevel"])?;
@@ -153,7 +164,11 @@ pub fn verify_repo(
             }
         }
     }
-    let remote_url = first_url.ok_or(RepoRefusal::NoRemotes)?;
+    let remote_url = match (first_url, policy) {
+        (Some(url), _) => Some(url),
+        (None, RemotePolicy::AllowLocalOnly) => None,
+        (None, RemotePolicy::RequireGithubRemote) => return Err(RepoRefusal::NoRemotes),
+    };
     Ok(VerifiedRepo {
         path: root.display().to_string(),
         remote_url,

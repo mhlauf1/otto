@@ -7,6 +7,15 @@ use sqlx::Row;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePool, SqlitePoolOptions};
 
 use crate::repo::VerifiedRepo;
+
+/// A project registered to a workspace.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct Project {
+    pub path: String,
+    pub name: String,
+    pub remote_url: Option<String>,
+}
 use crate::workspace::{GithubOwner, Identity, InvalidWorkspace, Tint, Workspace, WorkspaceId};
 
 #[derive(Debug, thiserror::Error)]
@@ -149,6 +158,33 @@ impl Store {
         Ok(())
     }
 
+    /// Projects registered to a workspace, by name.
+    ///
+    /// # Errors
+    /// Fails on database errors.
+    pub async fn projects(&self, workspace: &WorkspaceId) -> Result<Vec<Project>, StoreError> {
+        let rows = sqlx::query("SELECT path, remote_url FROM repos WHERE workspace_id = ?1")
+            .bind(workspace.as_str())
+            .fetch_all(&self.pool)
+            .await?;
+        let mut projects: Vec<Project> = rows
+            .iter()
+            .map(|r| {
+                let path: String = r.get("path");
+                let name = Path::new(&path)
+                    .file_name()
+                    .map_or_else(|| path.clone(), |n| n.to_string_lossy().into_owned());
+                Project {
+                    path,
+                    name,
+                    remote_url: r.get("remote_url"),
+                }
+            })
+            .collect();
+        projects.sort_by_key(|p| p.name.to_lowercase());
+        Ok(projects)
+    }
+
     /// Append to the audit log.
     ///
     /// # Errors
@@ -195,7 +231,10 @@ pub fn default_workspaces() -> Result<Vec<Workspace>, InvalidWorkspace> {
                 "michael.laufersweiler@playbookexp.com",
                 "mikelauf",
             )?,
-            vec![GithubOwner::parse("mikelauf")?],
+            vec![
+                GithubOwner::parse("mikelauf")?,
+                GithubOwner::parse("lulafit")?,
+            ],
         )?,
         Workspace::new(
             WorkspaceId::parse("lauf")?,
@@ -229,7 +268,33 @@ mod tests {
         );
         assert_eq!(ws[1].identity.git_email(), "mhlauf1@gmail.com");
         assert!(ws[0].allows_owner("mikelauf"));
+        assert!(
+            ws[0].allows_owner("lulafit"),
+            "Playbook org (Mike, 2026-10-20)"
+        );
         assert!(!ws[0].allows_owner("mhlauf1"));
+    }
+
+    #[tokio::test]
+    async fn migrations_bring_existing_installs_to_the_current_defaults() {
+        // An install seeded before migration 0002 must end up with the same allowlist
+        // as a fresh one. Simulate it: seed the old value, then re-run migrations.
+        let (dir, store) = temp_store().await;
+        store.seed_defaults().await.unwrap();
+        sqlx::query(
+            "UPDATE workspaces SET gh_owner_allowlist = '[\"mikelauf\"]' WHERE id = 'playbook'",
+        )
+        .execute(&store.pool)
+        .await
+        .unwrap();
+        sqlx::query("DELETE FROM _sqlx_migrations WHERE version = 2")
+            .execute(&store.pool)
+            .await
+            .unwrap();
+        let store = Store::open(&dir.path().join("otto.db")).await.unwrap();
+        let fresh = default_workspaces().unwrap();
+        let migrated = store.workspaces().await.unwrap();
+        assert_eq!(migrated[0].owner_allowlist, fresh[0].owner_allowlist);
     }
 
     #[tokio::test]
@@ -238,7 +303,7 @@ mod tests {
         store.seed_defaults().await.unwrap();
         let repo = VerifiedRepo {
             path: "/r".into(),
-            remote_url: "https://github.com/mhlauf1/r".into(),
+            remote_url: Some("https://github.com/mhlauf1/r".into()),
         };
         store
             .register_repo(&WorkspaceId::parse("lauf").unwrap(), &repo)

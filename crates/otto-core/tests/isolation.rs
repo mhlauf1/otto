@@ -21,7 +21,7 @@ use std::process::{Command, Output, Stdio};
 use otto_core::doctor::{self, CheckStatus};
 use otto_core::env::{FORBIDDEN, HostEnv, IsolatedEnv, is_forbidden};
 use otto_core::provision::{provision, write_doctor_status};
-use otto_core::repo::{RepoRefusal, verify_repo};
+use otto_core::repo::{RemotePolicy, RepoRefusal, verify_repo};
 use otto_core::store::default_workspaces;
 use otto_core::workspace::{OttoPaths, Workspace, WorkspaceLayout};
 
@@ -500,13 +500,24 @@ fn t4_workspace_environments_share_no_paths() {
 fn repos_only_open_in_the_workspace_that_owns_their_remote() {
     let w = World::new();
     let (work, _) = w.repo(&w.lauf, "mhlauf1");
-    let ok = verify_repo(&w.lauf, &w.layout(&w.lauf), &w.env(&w.lauf), &work).unwrap();
-    assert_eq!(ok.remote_url, "https://github.com/mhlauf1/project.git");
+    let ok = verify_repo(
+        &w.lauf,
+        &w.layout(&w.lauf),
+        &w.env(&w.lauf),
+        &work,
+        RemotePolicy::RequireGithubRemote,
+    )
+    .unwrap();
+    assert_eq!(
+        ok.remote_url.as_deref(),
+        Some("https://github.com/mhlauf1/project.git")
+    );
     let refused = verify_repo(
         &w.playbook,
         &w.layout(&w.playbook),
         &w.env(&w.playbook),
         &work,
+        RemotePolicy::RequireGithubRemote,
     )
     .unwrap_err();
     assert_eq!(
@@ -524,7 +535,14 @@ fn repos_that_override_guardrails_are_refused() {
     let env = w.env(&w.lauf);
     let (work, _) = w.repo(&w.lauf, "mhlauf1");
     git_ok(&env, &work, &["config", "core.hooksPath", "/dev/null"]);
-    let refused = verify_repo(&w.lauf, &w.layout(&w.lauf), &env, &work).unwrap_err();
+    let refused = verify_repo(
+        &w.lauf,
+        &w.layout(&w.lauf),
+        &env,
+        &work,
+        RemotePolicy::RequireGithubRemote,
+    )
+    .unwrap_err();
     assert_eq!(refused, RepoRefusal::HooksOverridden);
 }
 
@@ -683,7 +701,14 @@ fn t1_a_token_in_the_remote_url_is_refused_and_cannot_push() {
         &work,
         &["config", &format!("url.{}.insteadOf", bare.display()), url],
     );
-    let refused = verify_repo(&w.lauf, &w.layout(&w.lauf), &env, &work).unwrap_err();
+    let refused = verify_repo(
+        &w.lauf,
+        &w.layout(&w.lauf),
+        &env,
+        &work,
+        RemotePolicy::RequireGithubRemote,
+    )
+    .unwrap_err();
     assert!(
         matches!(refused, RepoRefusal::SecretInConfig(_)),
         "{refused:?}"
@@ -713,7 +738,14 @@ fn t1_an_http_auth_header_cannot_be_used_to_push() {
             "AUTHORIZATION: basic eA==",
         ],
     );
-    let refused = verify_repo(&w.lauf, &w.layout(&w.lauf), &env, &work).unwrap_err();
+    let refused = verify_repo(
+        &w.lauf,
+        &w.layout(&w.lauf),
+        &env,
+        &work,
+        RemotePolicy::RequireGithubRemote,
+    )
+    .unwrap_err();
     assert!(
         matches!(refused, RepoRefusal::AuthHeaderOverride(_)),
         "{refused:?}"
@@ -739,4 +771,49 @@ fn t1_an_http_auth_header_cannot_be_used_to_push() {
     assert!(!out.status.success());
     assert!(stderr(&out).contains("extraHeader"), "{}", stderr(&out));
     assert!(!has_branch(&bare, &env));
+}
+
+#[test]
+fn local_only_repos_open_when_assigned_but_never_with_a_foreign_remote() {
+    let w = World::new();
+    let env = w.env(&w.lauf);
+    let dir = w.dir.path().join("local-only");
+    fs::create_dir_all(&dir).unwrap();
+    git_ok(&env, &dir, &["init", "-q"]);
+    git_ok(
+        &env,
+        &dir,
+        &["commit", "-q", "--allow-empty", "-m", "first"],
+    );
+    let layout = w.layout(&w.lauf);
+    assert_eq!(
+        verify_repo(
+            &w.lauf,
+            &layout,
+            &env,
+            &dir,
+            RemotePolicy::RequireGithubRemote
+        )
+        .unwrap_err(),
+        RepoRefusal::NoRemotes
+    );
+    let ok = verify_repo(&w.lauf, &layout, &env, &dir, RemotePolicy::AllowLocalOnly).unwrap();
+    assert_eq!(ok.remote_url, None);
+    // Adding a remote owned by the other identity later doesn't get it through.
+    git_ok(
+        &env,
+        &dir,
+        &[
+            "remote",
+            "add",
+            "origin",
+            "https://github.com/mikelauf/x.git",
+        ],
+    );
+    let refused =
+        verify_repo(&w.lauf, &layout, &env, &dir, RemotePolicy::AllowLocalOnly).unwrap_err();
+    assert!(
+        matches!(refused, RepoRefusal::ForeignOwner { .. }),
+        "{refused:?}"
+    );
 }
