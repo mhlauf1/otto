@@ -190,27 +190,6 @@
   font-size: var(--otto-type-footnote-size);
 }
 
-.newSession {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--otto-space-1);
-  padding: var(--otto-space-2) var(--otto-space-2) 0;
-}
-
-.chip {
-  padding: var(--otto-space-0-5) var(--otto-space-2);
-  border: 1px solid var(--otto-color-border-subtle);
-  border-radius: var(--otto-radius-full);
-  background: transparent;
-  color: var(--otto-color-text-secondary);
-  font-size: var(--otto-type-footnote-size);
-}
-
-.chip:hover {
-  background: var(--otto-color-fill-hover);
-  color: var(--otto-color-text-primary);
-}
-
 .sessionState {
   width: 6px;
   height: 6px;
@@ -231,6 +210,10 @@
   background: transparent;
   color: var(--otto-color-text-secondary);
   font-size: var(--otto-type-footnote-size);
+}
+
+.composeButton {
+  right: calc(var(--otto-space-3) + var(--otto-space-20));
 }
 
 .titlebarButton:hover,

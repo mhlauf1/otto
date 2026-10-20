@@ -62,6 +62,11 @@ Newest entries first.
 
 ### Log
 
+#### 2026-10-20 (M3 revision)
+
+- Mike tried M3 and found two inputs confusing. The composer is now on demand (⌘L) with ↵ to send. "+ New session" is a single menu. SPEC §6.3 updated with Mike's approval.
+- Gap noted: sessions open in `~`. They need a project picker (repo registration UI), to be pulled forward before or alongside M4.
+
 #### 2026-10-20 (M1)
 
 - Built the isolation core in `otto-core`, wired it into Tauri, and added the Identity Doctor inspector.

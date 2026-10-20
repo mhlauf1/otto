@@ -1,34 +1,28 @@
-import { forwardRef, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { commands, type Workspace } from '../bindings';
 import type { LiveSession } from '../sessions/registry';
 import styles from './Composer.module.css';
 import { toPastedPrompt } from './paste';
 
-export interface ComposerHandle {
-  focus: () => void;
-}
-
 interface ComposerProps {
   workspace: Workspace;
   session: LiveSession;
+  /** Close the composer and hand focus back to the terminal. */
+  onClose: () => void;
 }
 
 const MAX_HEIGHT = 240;
 
 /**
- * The dictation-friendly composer (SPEC §6.3): a large, calm field that Wispr Flow can
- * type into. ⌘↵ sends to the active session. (⌥↵ queueing arrives with the queue in M5.)
+ * On-demand composer for long, dictated prompts (SPEC §6.3, amended 2026-10-20).
+ * The terminal is the everyday input; ⌘L opens this when a big, calm field helps.
+ * ↵ sends, ⇧↵ adds a line, esc closes. (Queueing arrives with the queue in M5.)
  * References: Ferndesk identity pill, Cursor controls row, Langdock multi-line field.
  */
-export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Composer(
-  { workspace, session },
-  ref,
-) {
+export function Composer({ workspace, session, onClose }: ComposerProps) {
   const [text, setText] = useState('');
   const field = useRef<HTMLTextAreaElement>(null);
   const ended = session.exit !== undefined;
-
-  useImperativeHandle(ref, () => ({ focus: () => field.current?.focus() }), []);
 
   // Grow with the text up to a cap, then scroll.
   useLayoutEffect(() => {
@@ -50,6 +44,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
     });
     setText('');
     session.term.scrollToBottom();
+    onClose();
   };
 
   return (
@@ -72,6 +67,7 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
         className={styles.field}
         rows={2}
         value={text}
+        autoFocus
         disabled={ended}
         placeholder={ended ? 'This session has ended.' : `Tell ${session.info.title} what to do…`}
         aria-label={`Message ${session.info.title} in ${workspace.name}`}
@@ -79,19 +75,20 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
           setText(e.target.value);
         }}
         onKeyDown={(e) => {
-          if (e.key === 'Enter' && e.metaKey) {
+          // Don't send mid-composition (IME / dictation still finalising text).
+          if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
             e.preventDefault();
             send();
           } else if (e.key === 'Escape') {
             e.preventDefault();
-            session.term.focus();
+            onClose();
           }
         }}
       />
       <div className={styles.controls}>
         <span className={styles.hint}>
-          <kbd className={styles.kbd}>⌘↵</kbd> send · <kbd className={styles.kbd}>esc</kbd> back to
-          terminal · <kbd className={styles.kbd}>⌘L</kbd> focus
+          <kbd className={styles.kbd}>↵</kbd> send · <kbd className={styles.kbd}>⇧↵</kbd> new line ·{' '}
+          <kbd className={styles.kbd}>esc</kbd> close
         </span>
         <button
           type="submit"
@@ -104,4 +101,4 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(function Compo
       </div>
     </form>
   );
-});
+}

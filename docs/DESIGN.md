@@ -137,3 +137,11 @@ This is a functional panel on the right (320px), toggled with ⌘⇧I or the tit
 - **Palette:** matches Supabase's grouping and keycaps, and Magnific's footer. The first QA pass found the global focus outline clipped under the input as a thick accent bar; it was removed, since the open palette is the focus indicator.
 - **Identity panel:** the first pass wrapped the email mid-word. Now the user sits on one line and the email truncates with the full value in a tooltip.
 - **Dark mode:** the panel uses `surfaceRaised` over a darker scrim (0.45), so it lifts without a border glow.
+
+### M3 revision after Mike's first use (2026-10-20)
+
+Two inputs (Claude's own `❯` line plus Otto's composer) were confusing, and ⌘↵ wasn't discoverable.
+
+- **The terminal is the everyday input.** The composer is now an on-demand sheet: ⌘L or the title-bar "Compose" button. ↵ sends, ⇧↵ adds a line, esc closes and returns focus to the terminal. It doesn't send while dictation or IME text is still composing.
+- **One "+ New session" menu** (Radix DropdownMenu) replaces three equal chips: Claude Code (⌘T), Codex, and Shell (described as "Terminal signed in as this workspace").
+- **Known gap:** sessions open in the home folder. A project picker is next on the list.

@@ -205,7 +205,7 @@ Define every value as a token in `src/design/tokens.ts`, with CSS variables gene
 
 1. **Main window:** a sidebar with workspace switcher, sessions and queue; the session view (terminal plus composer) in the centre; and an optional inspector for context and identity.
 2. **Command palette (⌘K):** new session, switch workspace, jump to session, run Identity Doctor, and open context.
-3. **Composer:** a large, calm input that works well with dictation. ⌘↵ sends and ⌥↵ adds the prompt to the queue.
+3. **Composer:** the terminal is the everyday input. ⌘L opens a large, calm composer on demand for long or dictated prompts: ↵ sends, ⇧↵ adds a line, esc closes, and ⌥↵ adds the prompt to the queue (M5).
 4. **Onboarding:** create a workspace, sign in to each CLI inside its isolated environment, generate or import the SSH key, set the GitHub owner allowlist, and run Identity Doctor until it's green.
 5. **Context editor:** view and edit the global and workspace layers.
 6. **Settings.**
@@ -319,3 +319,4 @@ Section 4's isolation rules enforce this mapping. Only `mikelauf`, with the play
 
 - 2026-10-20: First draft written with Mike (voice session).
 - 2026-10-20: Approved by Mike after M0 isolation research (ADR-005 to ADR-008). Codex is in both workspaces (§3). §4.1 env table updated: Claude/Anthropic dirs, Codex file storage, gh `--insecure-storage`, explicit git author vars, hardened `GIT_SSH_COMMAND` with askpass, XDG/ZDOTDIR, HOME policy, and a wider strip list. §4.3: hooks are a guardrail, credential scoping is the guarantee, and `core.hooksPath` lives in the workspace gitconfig.
+- 2026-10-20: Approved by Mike after trying M3: the composer is on demand (⌘L), ↵ sends and ⇧↵ adds a line (was ⌘↵). New sessions start from a single "+ New session" menu (Claude, Codex, Shell).

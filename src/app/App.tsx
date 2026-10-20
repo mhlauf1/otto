@@ -1,12 +1,13 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { AgentKind, DoctorReport, Workspace } from '../bindings';
 import { OttoMark } from '../brand/OttoMark';
 import { OttoWordmark } from '../brand/OttoWordmark';
-import { Composer, type ComposerHandle } from '../composer/Composer';
+import { Composer } from '../composer/Composer';
 import { DoctorPanel } from '../doctor/DoctorPanel';
 import { CommandPalette, type PaletteAction } from '../palette/CommandPalette';
 import { SessionError, useSessions } from '../sessions/registry';
+import { NewSessionMenu } from '../sessions/NewSessionMenu';
 import { TerminalView } from '../sessions/TerminalView';
 import { useWorkspaceUi } from '../state/workspace';
 import styles from './App.module.css';
@@ -30,7 +31,7 @@ const NEW_SESSION: { agent: AgentKind; label: string }[] = [
 
 /**
  * Main window: workspaces from the core, workspace tint, terminal sessions and the
- * Identity Doctor. The design pass (palette, composer) arrives in M3.
+ * Identity Doctor. The terminal is the everyday input; ⌘L opens the composer for long prompts.
  */
 export function App() {
   const workspaces = useWorkspaces();
@@ -48,7 +49,7 @@ export function App() {
   const { sessions, activeByWorkspace, open, close, select } = useSessions();
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const composer = useRef<ComposerHandle>(null);
+  const [composerOpen, setComposerOpen] = useState(false);
   const activeSessionId = active ? activeByWorkspace[active.id] : undefined;
   const workspaceSessions = sessions.filter((s) => s.info.workspaceId === active?.id);
   const activeSession = sessions.find((s) => s.info.id === activeSessionId);
@@ -85,7 +86,7 @@ export function App() {
       }
       if (!e.shiftKey && e.code === 'KeyL' && activeSession) {
         e.preventDefault();
-        composer.current?.focus();
+        setComposerOpen(true);
         return;
       }
       if (e.shiftKey && e.code === 'KeyI') {
@@ -259,21 +260,12 @@ export function App() {
               </li>
             ))}
           </ul>
-          <div className={styles.newSession}>
-            {NEW_SESSION.map(({ agent, label }) => (
-              <button
-                key={agent}
-                type="button"
-                className={styles.chip}
-                onClick={() => {
-                  void startSession(active.id, agent);
-                }}
-                title={agent === 'claude' ? 'New Claude session (⌘T)' : `New ${label} session`}
-              >
-                + {label}
-              </button>
-            ))}
-          </div>
+          <NewSessionMenu
+            workspaceName={active.name}
+            onPick={(agent) => {
+              void startSession(active.id, agent);
+            }}
+          />
         </nav>
 
         <div className={styles.identityFooter} data-tint={active.tint}>
@@ -295,6 +287,19 @@ export function App() {
               ? ` · ${sessions.find((s) => s.info.id === activeSessionId)?.info.title ?? ''}`
               : ''}
           </span>
+          {activeSession ? (
+            <button
+              type="button"
+              className={[styles.titlebarButton, styles.composeButton].join(' ')}
+              onClick={() => {
+                setComposerOpen((o) => !o);
+              }}
+              aria-pressed={composerOpen}
+              title="Compose a long prompt (⌘L)"
+            >
+              Compose
+            </button>
+          ) : null}
           <button
             type="button"
             className={styles.titlebarButton}
@@ -317,12 +322,15 @@ export function App() {
           {sessions.map((s) => (
             <TerminalView key={s.info.id} session={s} visible={s.info.id === activeSessionId} />
           ))}
-          {activeSession ? (
+          {activeSession && composerOpen ? (
             <Composer
               key={activeSession.info.id}
-              ref={composer}
               workspace={active}
               session={activeSession}
+              onClose={() => {
+                setComposerOpen(false);
+                activeSession.term.focus();
+              }}
             />
           ) : null}
         </div>
