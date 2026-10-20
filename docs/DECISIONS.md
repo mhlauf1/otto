@@ -133,3 +133,10 @@ Each ADR records the context, the options, the decision and its consequences. Ne
   - The shell agent is `zsh -l` with `ZDOTDIR` set to the workspace. Its prompt names the workspace.
   - Sessions live in memory until M5 adds persistence.
 - **Consequences:** Closing a session kills its program; dropping the PTY kills the child. Typing and dictation (Wispr Flow) go straight into the terminal until the M3 composer.
+
+## ADR-014 — `freezePrototype` is off
+
+- **Status:** Accepted (2026-10-20)
+- **Context:** Tauri's `freezePrototype` freezes `Object.prototype` to stop prototype-pollution attacks. xterm.js 6 assigns to an inherited property while loading, which throws under a frozen prototype ("Attempted to assign to readonly property"), and the window rendered blank. Browser tests missed it because only the Tauri webview freezes prototypes.
+- **Decision:** Turn `freezePrototype` off. Prototype pollution needs attacker-controlled input reaching the webview. Otto loads no remote content, has a strict CSP (`script-src 'self'`) and exposes only typed commands, so the remaining risk is low.
+- **Consequences:** The Playwright smoke test now fails on any page error. Revisit when xterm.js no longer trips the frozen prototype.

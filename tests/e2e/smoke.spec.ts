@@ -1,5 +1,12 @@
 import { expect, test } from '@playwright/test';
 
+// A module that throws at load time leaves the window blank. Fail on any page error.
+test.beforeEach(({ page }) => {
+  page.on('pageerror', (error) => {
+    throw error;
+  });
+});
+
 test('hello window renders in both colour schemes', async ({ page }) => {
   for (const colorScheme of ['light', 'dark'] as const) {
     await page.emulateMedia({ colorScheme });
