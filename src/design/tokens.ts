@@ -78,6 +78,7 @@ export interface Palette {
   success: string;
   warning: string;
   danger: string;
+  terminal: string;
 }
 
 export const color: { light: Palette; dark: Palette } = {
@@ -98,6 +99,7 @@ export const color: { light: Palette; dark: Palette } = {
     success: '#1E9E5A',
     warning: '#B88A00',
     danger: '#D93838',
+    terminal: '#141416',
   },
   dark: {
     window: '#161618',
@@ -116,6 +118,7 @@ export const color: { light: Palette; dark: Palette } = {
     success: '#3CC27A',
     warning: '#E0B53A',
     danger: '#FF5F5A',
+    terminal: '#141416',
   },
 };
 
@@ -166,6 +169,35 @@ export const motion = {
     enter: 'cubic-bezier(0, 0, 0, 1)',
     exit: 'cubic-bezier(0.3, 0, 1, 1)',
   },
+} as const;
+
+/**
+ * Terminal palette. Terminals are always graphite-dark: a calm light shell framing a
+ * dark terminal surface (PlanetScale reference, docs/DESIGN.md). xterm.js needs real
+ * colour values, so these are read from TypeScript rather than CSS variables.
+ */
+export const terminal = {
+  background: '#141416',
+  foreground: '#E6E6EA',
+  cursor: '#F2F2F4',
+  cursorAccent: '#141416',
+  selectionBackground: 'rgba(108, 134, 255, 0.32)',
+  black: '#1C1C1F',
+  red: '#FF6B6B',
+  green: '#3CC27A',
+  yellow: '#E0B53A',
+  blue: '#6C86FF',
+  magenta: '#C08CFF',
+  cyan: '#4FC3D9',
+  white: '#D0D0D6',
+  brightBlack: '#5A5A63',
+  brightRed: '#FF8A8A',
+  brightGreen: '#6FD9A0',
+  brightYellow: '#F0CC66',
+  brightBlue: '#9AADFF',
+  brightMagenta: '#D4B0FF',
+  brightCyan: '#7FD8E8',
+  brightWhite: '#F2F2F4',
 } as const;
 
 export const layout = {

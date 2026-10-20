@@ -2,7 +2,18 @@
 
 Newest entries first.
 
-## Current milestone: M1 — Isolation core ✅ (awaiting Mike's demo)
+## Current milestone: M2 — Terminal sessions ✅ (needs Mike to sign in)
+
+### Definition of done
+
+- [x] PTY sessions in `otto-core`, spawned only from `IsolatedEnv` and covered by 2 new isolation tests (21 total).
+- [x] xterm.js with WebGL and fit, themed from tokens; scrollback survives switches.
+- [x] Claude (with a fixed `--session-id`), Codex and Shell sessions; ⌘T new Claude session, ⌘W close.
+- [x] Sign-in flows: Identity Doctor "Sign in" buttons run `claude auth login` / `codex login` inside the workspace.
+- [x] Codex CLI 0.163 installed (Node 24, nvm).
+- [ ] **Mike:** sign in to Claude and Codex in both workspaces from the Identity panel, then confirm Identity Doctor is fully green.
+
+## Previous milestone: M1 — Isolation core ✅ (CI green)
 
 ### Definition of done
 
@@ -14,7 +25,7 @@ Newest entries first.
 - [x] Identity Doctor (gh, git, ssh, Claude, Codex, hooks, rc-file secrets), run on launch, on switch, and on demand with ⌘⇧I.
 - [x] Isolation suite: 19 tests, offline, real git and gh, and a dedicated CI job.
 - [x] Real logins set up: Playbook = `mikelauf`, Lauf = `mhlauf1`, each isolated with `--insecure-storage`.
-- [ ] Demo to Mike.
+- [x] CI green on GitHub, including the isolation job.
 
 **Known gaps (by design, later milestones):** SSH key generation and onboarding (M6); Claude and Codex sign-in flows (M2); repo picker UI (M3); the Playbook GitHub **org** isn't on the Playbook allowlist yet, so Mike needs to supply its name.
 

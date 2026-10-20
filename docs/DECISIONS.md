@@ -120,3 +120,16 @@ Each ADR records the context, the options, the decision and its consequences. Ne
   - The askpass helper answers only ssh's exact passphrase prompt for that workspace's key.
   - Both are covered by isolation tests.
 - **Also learned:** git contacts the remote **before** `pre-push` runs, so authentication with the workspace's own credential happens first. The hook test for URL-rewrite attacks therefore calls the hook directly, the same way git does, rather than relying on the network.
+
+## ADR-013 — Terminal sessions
+
+- **Status:** Accepted (2026-10-20)
+- **Decision:**
+  - PTYs are spawned in `otto-core` (`pty.rs`, using portable-pty) from an `IsolatedEnv`, exactly like other children, and are covered by the isolation suite.
+  - Output streams to the UI over a Tauri `Channel` as UTF-8 text. `Utf8Stream` holds back characters split across reads.
+  - Each xterm.js `Terminal` lives outside React (`src/sessions/registry.ts`), so scrollback survives tab and workspace switches. React only attaches it.
+  - Claude sessions get a UUID up front (`--session-id`), so M5 can resume them.
+  - Sign-in runs each CLI's own flow in a PTY inside the workspace: `claude auth login`, `codex login`.
+  - The shell agent is `zsh -l` with `ZDOTDIR` set to the workspace. Its prompt names the workspace.
+  - Sessions live in memory until M5 adds persistence.
+- **Consequences:** Closing a session kills its program; dropping the PTY kills the child. Typing and dictation (Wispr Flow) go straight into the terminal until the M3 composer.

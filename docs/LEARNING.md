@@ -91,3 +91,27 @@ Every CLI (git, gh, claude, codex) decides who you are by reading **environment 
 
 - _Pro Git_, chapter 8.3 "Git Hooks" (git-scm.com/book)
 - _The Rust Book_, chapter 11 "Writing Automated Tests"
+
+---
+
+## Chapter 2 — Terminals (M2)
+
+### What a PTY is
+
+Programs like `claude` and `codex` expect a _terminal_, not a pipe. They draw colour, move the cursor and react to window size. A **PTY** (pseudo-terminal) is the OS giving a program a fake terminal: the program writes to one end, and Otto reads the other end and forwards everything to the window. Keystrokes travel the other way.
+
+### xterm.js
+
+xterm.js is the terminal emulator from VS Code. It turns the raw byte stream (text plus escape codes like `\x1b[2m`) into a grid of characters. The **WebGL addon** draws that grid on the GPU, which keeps typing latency low. The **fit addon** works out how many columns and rows fit in the panel, and Otto tells the PTY so programs re-layout.
+
+### Streaming without breaking characters
+
+Output arrives in chunks of bytes, and a chunk can end halfway through a multi-byte character like `→`. `Utf8Stream` keeps the incomplete tail and prepends it to the next chunk, so the UI only ever sees whole characters.
+
+### Why terminals live outside React
+
+React components unmount and remount, for example when you switch workspace. If the terminal lived inside a component, you'd lose its history. So each `Terminal` lives in a small store (`registry.ts`), and the component just plugs it into the page when visible.
+
+### Channels
+
+A Tauri command returns once. A **Channel** is a pipe the frontend hands to a command, so Rust can keep sending messages (output, then an exit event) for as long as the session lives.

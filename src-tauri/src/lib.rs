@@ -1,6 +1,7 @@
 //! The Tauri shell: window, IPC wiring and logging. Logic lives in `otto-core`.
 
 mod commands;
+mod sessions;
 mod state;
 
 use std::path::{Path, PathBuf};
@@ -21,6 +22,11 @@ pub fn ipc() -> Builder<tauri::Wry> {
         commands::list_workspaces,
         commands::run_identity_doctor,
         commands::register_repo,
+        commands::open_session,
+        commands::write_session,
+        commands::resize_session,
+        commands::close_session,
+        commands::list_sessions,
     ])
 }
 

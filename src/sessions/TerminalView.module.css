@@ -1,0 +1,12 @@
+.terminal {
+  flex: 1;
+  min-height: 0;
+  padding: var(--otto-space-3) var(--otto-space-2) var(--otto-space-2) var(--otto-space-4);
+  border-radius: var(--otto-radius-lg);
+  background: var(--otto-color-terminal);
+  box-shadow: var(--otto-shadow-md);
+}
+
+.terminal[hidden] {
+  display: none;
+}

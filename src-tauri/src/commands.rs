@@ -1,17 +1,24 @@
 //! IPC commands. Keep these thin: translate the call, delegate to `otto-core`.
 
+// Tauri deserializes every argument into an owned value and hands out `State` by value.
+#![allow(clippy::needless_pass_by_value)]
+
 use std::path::PathBuf;
 
+use otto_core::agent::{AgentKind, Purpose};
 use otto_core::doctor::{self, DoctorReport};
 use otto_core::env::IsolatedEnv;
 use otto_core::provision::write_doctor_status;
+use otto_core::pty::{PtyEvent, PtySession};
 use otto_core::repo::{RepoRefusal, VerifiedRepo, verify_repo};
 use otto_core::workspace::Workspace;
 use otto_core::{AppInfo, AppInfoError};
 use serde::Serialize;
 use specta::Type;
 use tauri::State;
+use tauri::ipc::Channel;
 
+use crate::sessions::SessionInfo;
 use crate::state::AppState;
 
 /// Errors any command can return, in words Mike can read.
@@ -121,4 +128,104 @@ pub async fn register_repo(
         .await
         .map_err(|e| CommandError::Internal(e.to_string()))?;
     Ok(repo)
+}
+
+/// Open an agent (or shell) in a real terminal inside the workspace's isolated
+/// environment. Output streams to `on_event`. With `sign_in`, runs the CLI's own login flow.
+#[tauri::command]
+#[specta::specta]
+pub async fn open_session(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    agent: AgentKind,
+    sign_in: bool,
+    cols: u16,
+    rows: u16,
+    on_event: Channel<PtyEvent>,
+) -> Result<SessionInfo, CommandError> {
+    let ws = state.workspace(&workspace_id).await?;
+    let layout = state.paths.workspace(&ws.id);
+    let env = IsolatedEnv::build(&ws, &layout, &state.host);
+    let id = uuid::Uuid::new_v4().to_string();
+    let purpose = if sign_in {
+        Purpose::SignIn
+    } else {
+        Purpose::Work {
+            claude_session_id: (agent == AgentKind::Claude).then(|| id.clone()),
+        }
+    };
+    let spec = agent.launch(&purpose);
+    let pty = PtySession::spawn(
+        &env,
+        &spec,
+        &state.host.home,
+        cols.max(20),
+        rows.max(5),
+        move |event| {
+            let _ = on_event.send(event);
+        },
+    )
+    .map_err(|e| CommandError::Invalid(e.to_string()))?;
+    let title = if sign_in {
+        format!("Sign in · {}", agent.label())
+    } else {
+        agent.label().to_owned()
+    };
+    let info = SessionInfo {
+        id,
+        workspace_id: ws.id.to_string(),
+        agent,
+        title,
+        sign_in,
+    };
+    state.sessions.insert(info.clone(), pty);
+    let detail = serde_json::json!({ "agent": agent, "signIn": sign_in });
+    let _ = state
+        .store
+        .record_event(Some(&ws.id), "session_opened", &detail)
+        .await;
+    Ok(info)
+}
+
+/// Keystrokes, paste and dictation all arrive here.
+#[tauri::command]
+#[specta::specta]
+pub fn write_session(
+    state: State<'_, AppState>,
+    id: String,
+    data: String,
+) -> Result<(), CommandError> {
+    state
+        .sessions
+        .with(&id, |pty| pty.write(&data))
+        .ok_or(CommandError::NotFound(id))?
+        .map_err(|e| CommandError::Invalid(e.to_string()))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn resize_session(
+    state: State<'_, AppState>,
+    id: String,
+    cols: u16,
+    rows: u16,
+) -> Result<(), CommandError> {
+    state
+        .sessions
+        .with(&id, |pty| pty.resize(cols.max(20), rows.max(5)))
+        .ok_or(CommandError::NotFound(id))?
+        .map_err(|e| CommandError::Invalid(e.to_string()))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn close_session(state: State<'_, AppState>, id: String) -> bool {
+    state.sessions.close(&id)
+}
+
+/// Sessions still running (for example after the window reloads).
+#[tauri::command]
+#[specta::specta]
+pub fn list_sessions(state: State<'_, AppState>) -> Vec<SessionInfo> {
+    state.sessions.list()
 }

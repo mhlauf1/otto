@@ -9,6 +9,7 @@ pub struct AppState {
     pub paths: OttoPaths,
     pub host: HostEnv,
     pub store: Store,
+    pub sessions: crate::sessions::Sessions,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -38,7 +39,12 @@ impl AppState {
         for ws in store.workspaces().await? {
             provision(&ws, &paths.workspace(&ws.id))?;
         }
-        Ok(Self { paths, host, store })
+        Ok(Self {
+            paths,
+            host,
+            store,
+            sessions: crate::sessions::Sessions::default(),
+        })
     }
 
     pub async fn workspace(&self, id: &str) -> Result<Workspace, crate::commands::CommandError> {

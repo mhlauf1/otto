@@ -1,9 +1,11 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo } from 'react';
-import type { DoctorReport, Workspace } from '../bindings';
+import { useEffect, useMemo, useState } from 'react';
+import type { AgentKind, DoctorReport, Workspace } from '../bindings';
 import { OttoMark } from '../brand/OttoMark';
 import { OttoWordmark } from '../brand/OttoWordmark';
 import { DoctorPanel } from '../doctor/DoctorPanel';
+import { SessionError, useSessions } from '../sessions/registry';
+import { TerminalView } from '../sessions/TerminalView';
 import { useWorkspaceUi } from '../state/workspace';
 import styles from './App.module.css';
 import {
@@ -18,9 +20,15 @@ import {
 /** Which half of the mark a workspace lights: the first two workspaces own a half each. */
 const sideFor = (index: number) => (index === 0 ? 'left' : index === 1 ? 'right' : 'none');
 
+const NEW_SESSION: { agent: AgentKind; label: string }[] = [
+  { agent: 'claude', label: 'Claude' },
+  { agent: 'codex', label: 'Codex' },
+  { agent: 'shell', label: 'Shell' },
+];
+
 /**
- * Main window: workspaces from the core, workspace tint, and the Identity Doctor.
- * The full shell (sessions, composer, palette) arrives in M2–M3.
+ * Main window: workspaces from the core, workspace tint, terminal sessions and the
+ * Identity Doctor. The design pass (palette, composer) arrives in M3.
  */
 export function App() {
   const workspaces = useWorkspaces();
@@ -35,14 +43,49 @@ export function App() {
   const doctor = useDoctor(active?.id);
   const queryClient = useQueryClient();
 
-  // ⌘1…⌘9 switch workspaces and re-run that workspace's Identity Doctor (SPEC §4.4, §6.4).
-  // ⌘⇧I toggles the Identity Doctor.
+  const { sessions, activeByWorkspace, open, close, select } = useSessions();
+  const [sessionError, setSessionError] = useState<string | null>(null);
+  const activeSessionId = active ? activeByWorkspace[active.id] : undefined;
+  const workspaceSessions = sessions.filter((s) => s.info.workspaceId === active?.id);
+
+  // When a sign-in flow ends, re-check who that workspace is signed in as.
+  useEffect(() => {
+    useSessions.setState({
+      onExit: (s) => {
+        if (s.info.signIn) {
+          void queryClient.invalidateQueries({ queryKey: queryKeys.doctor(s.info.workspaceId) });
+        }
+      },
+    });
+  }, [queryClient]);
+
+  const startSession = async (workspaceId: string, agent: AgentKind, signIn = false) => {
+    setSessionError(null);
+    try {
+      await open(workspaceId, agent, signIn);
+    } catch (e) {
+      setSessionError(e instanceof SessionError ? e.message : 'Couldn’t start the session.');
+    }
+  };
+
+  // ⌘1…⌘9 switch workspaces (and re-run the Identity Doctor). ⌘T new Claude session,
+  // ⌘W close session, ⌘⇧I Identity Doctor (SPEC §4.4, §6.4).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!e.metaKey) return;
       if (e.shiftKey && e.code === 'KeyI') {
         e.preventDefault();
         toggleInspector();
+        return;
+      }
+      if (!e.shiftKey && e.code === 'KeyT' && active) {
+        e.preventDefault();
+        void startSession(active.id, 'claude');
+        return;
+      }
+      if (!e.shiftKey && e.code === 'KeyW' && activeSessionId) {
+        e.preventDefault();
+        close(activeSessionId);
         return;
       }
       const digit = /^Digit([1-9])$/.exec(e.code)?.[1] ?? (/^[1-9]$/.test(e.key) ? e.key : null);
@@ -57,7 +100,7 @@ export function App() {
     return () => {
       window.removeEventListener('keydown', onKey);
     };
-  }, [list, setActive, toggleInspector, queryClient]);
+  });
 
   if (!active) {
     return (
@@ -96,12 +139,12 @@ export function App() {
 
         <nav aria-label="Workspaces">
           <p className={styles.sectionLabel}>Workspaces</p>
-          <ul className={styles.workspaceList}>
+          <ul className={styles.list}>
             {list.map((w, i) => (
               <li key={w.id}>
                 <button
                   type="button"
-                  className={styles.workspaceItem}
+                  className={styles.row}
                   data-tint={w.tint}
                   aria-current={w.id === active.id ? 'true' : undefined}
                   onClick={() => {
@@ -109,7 +152,7 @@ export function App() {
                   }}
                 >
                   <span className={styles.dot} aria-hidden />
-                  <span className={styles.workspaceName}>{w.name}</span>
+                  <span className={styles.rowName}>{w.name}</span>
                   <HealthBadge report={doctors[i]?.data} />
                   <kbd className={styles.kbd}>⌘{i + 1}</kbd>
                 </button>
@@ -118,12 +161,70 @@ export function App() {
           </ul>
         </nav>
 
-        <p className={styles.sidebarFooter}>Milestone 1 · Isolation core</p>
+        <nav aria-label={`${active.name} sessions`}>
+          <p className={styles.sectionLabel}>Sessions</p>
+          <ul className={styles.list}>
+            <li>
+              <button
+                type="button"
+                className={styles.row}
+                aria-current={activeSessionId === undefined ? 'true' : undefined}
+                onClick={() => {
+                  select(active.id, undefined);
+                }}
+              >
+                <span className={styles.rowName}>Home</span>
+              </button>
+            </li>
+            {workspaceSessions.map((s) => (
+              <li key={s.info.id}>
+                <button
+                  type="button"
+                  className={styles.row}
+                  aria-current={s.info.id === activeSessionId ? 'true' : undefined}
+                  onClick={() => {
+                    select(active.id, s.info.id);
+                  }}
+                >
+                  <span
+                    className={styles.sessionState}
+                    data-state={s.exit === undefined ? 'running' : 'done'}
+                    aria-label={s.exit === undefined ? 'Running' : 'Ended'}
+                    role="img"
+                  />
+                  <span className={styles.rowName}>{s.info.title}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+          <div className={styles.newSession}>
+            {NEW_SESSION.map(({ agent, label }) => (
+              <button
+                key={agent}
+                type="button"
+                className={styles.chip}
+                onClick={() => {
+                  void startSession(active.id, agent);
+                }}
+                title={agent === 'claude' ? 'New Claude session (⌘T)' : `New ${label} session`}
+              >
+                + {label}
+              </button>
+            ))}
+          </div>
+        </nav>
+
+        <p className={styles.sidebarFooter}>Milestone 2 · Terminal sessions</p>
       </aside>
 
       <main className={styles.main}>
         <div className={styles.titlebar} data-tauri-drag-region>
-          <span className={styles.titlebarWorkspace}>{active.name}</span>
+          <span className={styles.titlebarWorkspace}>
+            {active.name}
+            {activeSessionId
+              ? ` · ${sessions.find((s) => s.info.id === activeSessionId)?.info.title ?? ''}`
+              : ''}
+          </span>
           <button
             type="button"
             className={styles.titlebarButton}
@@ -134,19 +235,35 @@ export function App() {
             Identity
           </button>
         </div>
-        <section className={styles.hero}>
-          <OttoMark
-            size={88}
-            lit={sideFor(activeIndex)}
-            label={`Otto — ${active.name} workspace`}
-          />
-          <h1 className={styles.headline}>Every identity, signed in. Nothing crossing over.</h1>
-          <p className={styles.subhead}>
-            You’re in <strong className={styles.accentText}>{active.name}</strong> as{' '}
-            {active.identity.githubUser}. Press ⌘1 or ⌘2 to switch.
+
+        {sessionError ? (
+          <p className={styles.banner} role="alert">
+            {sessionError}
           </p>
-          <CoreStatus />
-        </section>
+        ) : null}
+
+        <div className={styles.stage} hidden={activeSessionId === undefined}>
+          {/* Every session stays mounted so scrollback survives tab and workspace switches. */}
+          {sessions.map((s) => (
+            <TerminalView key={s.info.id} session={s} visible={s.info.id === activeSessionId} />
+          ))}
+        </div>
+
+        {activeSessionId === undefined ? (
+          <section className={styles.hero}>
+            <OttoMark
+              size={88}
+              lit={sideFor(activeIndex)}
+              label={`Otto — ${active.name} workspace`}
+            />
+            <h1 className={styles.headline}>Every identity, signed in. Nothing crossing over.</h1>
+            <p className={styles.subhead}>
+              You’re in <strong className={styles.accentText}>{active.name}</strong> as{' '}
+              {active.identity.githubUser}. Press ⌘T for a Claude session, ⌘1 or ⌘2 to switch.
+            </p>
+            <CoreStatus />
+          </section>
+        ) : null}
       </main>
 
       {inspectorOpen ? (
@@ -155,6 +272,9 @@ export function App() {
           report={doctor}
           onRerun={() => {
             void doctor.refetch();
+          }}
+          onSignIn={(agent) => {
+            void startSession(active.id, agent, true);
           }}
         />
       ) : null}

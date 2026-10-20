@@ -589,3 +589,81 @@ fn doctor_flags_a_token_left_in_the_shared_keychain() {
     assert_eq!(gh.status, CheckStatus::Fail);
     assert!(gh.detail.contains("Keychain"));
 }
+
+// ── Terminal sessions (M2) ─────────────────────────────────────────────────
+
+fn run_in_pty(
+    env: &IsolatedEnv,
+    spec: &otto_core::agent::LaunchSpec,
+    cwd: &Path,
+) -> (String, Option<u32>) {
+    use otto_core::pty::{PtyEvent, PtySession};
+    let (tx, rx) = std::sync::mpsc::channel();
+    let _session = PtySession::spawn(env, spec, cwd, 200, 50, move |e| {
+        let _ = tx.send(e);
+    })
+    .unwrap();
+    let mut out = String::new();
+    loop {
+        match rx
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .expect("pty timed out")
+        {
+            PtyEvent::Data { text } => out.push_str(&text),
+            PtyEvent::Exit { code } => return (out, code),
+        }
+    }
+}
+
+#[test]
+fn t3_agent_sessions_in_a_pty_get_only_the_isolated_environment() {
+    use otto_core::agent::{AgentKind, Purpose};
+    let w = World::new();
+    // Stand-in for the real CLI: prints the environment it was given.
+    w.fake_cli("claude", "echo \"session-args: $*\"; /usr/bin/env");
+    let env = w.env(&w.lauf);
+    let spec = AgentKind::Claude.launch(&Purpose::Work {
+        claude_session_id: Some("s-1".into()),
+    });
+    let (out, code) = run_in_pty(&env, &spec, w.dir.path());
+    assert_eq!(code, Some(0));
+    assert!(out.contains("session-args: --session-id s-1"), "{out}");
+    assert!(out.contains("OTTO_WORKSPACE=lauf"));
+    assert!(out.contains(&format!(
+        "CLAUDE_CONFIG_DIR={}",
+        w.layout(&w.lauf).claude_dir().display()
+    )));
+    for line in out.lines() {
+        if let Some((key, _)) = line.trim_end_matches('\r').split_once('=') {
+            assert!(!is_forbidden(key), "PTY session saw forbidden {key}");
+        }
+    }
+}
+
+#[test]
+fn t4_two_pty_sessions_run_side_by_side_as_different_identities() {
+    use otto_core::agent::{AgentKind, Purpose};
+    let w = World::new();
+    w.fake_cli(
+        "claude",
+        "echo \"who=$GIT_AUTHOR_EMAIL cfg=$CLAUDE_CONFIG_DIR\"; sleep 0.3",
+    );
+    let spec = AgentKind::Claude.launch(&Purpose::Work {
+        claude_session_id: None,
+    });
+    let a = {
+        let env = w.env(&w.playbook);
+        let spec = spec.clone();
+        let cwd = w.dir.path().to_path_buf();
+        std::thread::spawn(move || run_in_pty(&env, &spec, &cwd).0)
+    };
+    let (b, _) = run_in_pty(&w.env(&w.lauf), &spec, w.dir.path());
+    let a = a.join().unwrap();
+    assert!(
+        a.contains("who=michael.laufersweiler@playbookexp.com"),
+        "{a}"
+    );
+    assert!(a.contains("/workspaces/playbook/claude"));
+    assert!(b.contains("who=mhlauf1@gmail.com"), "{b}");
+    assert!(b.contains("/workspaces/lauf/claude"));
+}

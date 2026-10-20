@@ -95,3 +95,9 @@ Screenshots: `pnpm test:e2e` writes `test-results/hello-{light,dark,lauf}.png`. 
 ### M1 — Identity Doctor inspector
 
 This is a functional panel on the right (320px), toggled with ⌘⇧I or the title-bar "Identity" button. Each check shows a **glyph, a word (for VoiceOver) and a colour**, never colour alone, which resolves the jade-vs-success concern above. The sidebar shows ✓/✕ per workspace for push safety. It follows the Linear and LangChain references above; the full visual pass happens in M3.
+
+### M2 — Terminal sessions
+
+- **Terminal surface:** always graphite-dark (`terminal` tokens), inset in the content area with a 12px radius and a medium shadow. This is the "calm light shell framing a dark terminal" from the PlanetScale reference. The ANSI palette is tuned to the brand: blue is the dark-mode cobalt and green is near the success green. There's no orange.
+- **Sidebar:** a Sessions section per workspace with a running dot in the workspace accent, plus "+ Claude / + Codex / + Shell" chips.
+- **Identity Doctor:** a red Claude or Codex row shows an accent "Sign in to … as <Workspace>" button that opens the sign-in flow in a terminal.

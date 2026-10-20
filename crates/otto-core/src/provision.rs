@@ -57,6 +57,14 @@ pub fn provision(workspace: &Workspace, layout: &WorkspaceLayout) -> Result<(), 
     )?;
     write_with_mode(&layout.askpass(), &hooks::askpass(workspace, layout), 0o700)?;
 
+    // Shell sessions read $ZDOTDIR (inside the workspace), never ~/.zshrc. The prompt
+    // names the workspace so it's obvious which identity a shell runs as (SPEC §4.5).
+    let zshrc = format!(
+        "# Managed by Otto. Regenerated on every launch.\nPROMPT='%F{{8}}{name}%f %1~ %# '\nexport HISTFILE=\"$ZDOTDIR/.zsh_history\"\n",
+        name = workspace.name
+    );
+    write_with_mode(&layout.zsh_dir().join(".zshrc"), &zshrc, 0o600)?;
+
     // Codex: keep auth in CODEX_HOME/auth.json, never the shared keyring (ADR-005).
     // Only add the setting, so Mike's own Codex config stays intact.
     let codex_config = layout.codex_dir().join("config.toml");

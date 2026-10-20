@@ -1,5 +1,5 @@
 import type { UseQueryResult } from '@tanstack/react-query';
-import type { CheckStatus, DoctorReport, Workspace } from '../bindings';
+import type { AgentKind, CheckStatus, DoctorReport, Workspace } from '../bindings';
 import { FriendlyError } from '../app/queries';
 import styles from './DoctorPanel.module.css';
 
@@ -15,10 +15,15 @@ interface DoctorPanelProps {
   workspace: Workspace;
   report: UseQueryResult<DoctorReport>;
   onRerun: () => void;
+  /** Open the CLI's own sign-in flow inside this workspace. */
+  onSignIn: (agent: AgentKind) => void;
 }
 
+/** Checks that can be fixed by signing in from a terminal session. */
+const SIGN_IN: Partial<Record<string, AgentKind>> = { claude: 'claude', codex: 'codex' };
+
 /** Identity Doctor inspector (SPEC §4.4). Status is always glyph + word + colour, never colour alone. */
-export function DoctorPanel({ workspace, report, onRerun }: DoctorPanelProps) {
+export function DoctorPanel({ workspace, report, onRerun, onSignIn }: DoctorPanelProps) {
   const verdict = report.data
     ? report.data.allGreen
       ? 'All clear. Pushes are allowed.'
@@ -70,7 +75,20 @@ export function DoctorPanel({ workspace, report, onRerun }: DoctorPanelProps) {
                 <div className={styles.body}>
                   <p className={styles.label}>{check.label}</p>
                   <p className={styles.detail}>{check.detail}</p>
-                  {check.fix && check.status !== 'pass' ? (
+                  {check.status === 'fail' &&
+                  SIGN_IN[check.id] &&
+                  check.detail.includes('signed in') ? (
+                    <button
+                      type="button"
+                      className={styles.action}
+                      onClick={() => {
+                        const agent = SIGN_IN[check.id];
+                        if (agent) onSignIn(agent);
+                      }}
+                    >
+                      Sign in to {check.label} as {workspace.name}
+                    </button>
+                  ) : check.fix && check.status !== 'pass' ? (
                     <p className={styles.fix}>{check.fix}</p>
                   ) : null}
                 </div>
