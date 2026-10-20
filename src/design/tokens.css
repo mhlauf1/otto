@@ -1,0 +1,157 @@
+/* Generated from src/design/tokens.ts by `pnpm tokens`. Do not edit by hand. */
+
+:root {
+  --otto-space-0: 0;
+  --otto-space-1: 4px;
+  --otto-space-2: 8px;
+  --otto-space-3: 12px;
+  --otto-space-4: 16px;
+  --otto-space-5: 20px;
+  --otto-space-6: 24px;
+  --otto-space-8: 32px;
+  --otto-space-10: 40px;
+  --otto-space-12: 48px;
+  --otto-space-16: 64px;
+  --otto-space-20: 80px;
+  --otto-space-0-5: 2px;
+  --otto-space-1-5: 6px;
+  --otto-radius-xs: 4px;
+  --otto-radius-sm: 6px;
+  --otto-radius-md: 8px;
+  --otto-radius-lg: 12px;
+  --otto-radius-xl: 16px;
+  --otto-radius-full: 9999px;
+  --otto-font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  --otto-font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
+  --otto-font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+  --otto-type-caption-size: 11px;
+  --otto-type-caption-line: 14px;
+  --otto-type-caption-weight: 500;
+  --otto-type-caption-tracking: 0.006em;
+  --otto-type-footnote-size: 12px;
+  --otto-type-footnote-line: 16px;
+  --otto-type-footnote-weight: 400;
+  --otto-type-footnote-tracking: 0em;
+  --otto-type-body-size: 13px;
+  --otto-type-body-line: 18px;
+  --otto-type-body-weight: 400;
+  --otto-type-body-tracking: -0.003em;
+  --otto-type-callout-size: 14px;
+  --otto-type-callout-line: 20px;
+  --otto-type-callout-weight: 400;
+  --otto-type-callout-tracking: -0.006em;
+  --otto-type-headline-size: 13px;
+  --otto-type-headline-line: 18px;
+  --otto-type-headline-weight: 590;
+  --otto-type-headline-tracking: -0.003em;
+  --otto-type-title3-size: 15px;
+  --otto-type-title3-line: 20px;
+  --otto-type-title3-weight: 590;
+  --otto-type-title3-tracking: -0.009em;
+  --otto-type-title2-size: 17px;
+  --otto-type-title2-line: 22px;
+  --otto-type-title2-weight: 590;
+  --otto-type-title2-tracking: -0.012em;
+  --otto-type-title1-size: 22px;
+  --otto-type-title1-line: 28px;
+  --otto-type-title1-weight: 600;
+  --otto-type-title1-tracking: -0.018em;
+  --otto-type-display-size: 34px;
+  --otto-type-display-line: 40px;
+  --otto-type-display-weight: 600;
+  --otto-type-display-tracking: -0.024em;
+  --otto-duration-instant: 80ms;
+  --otto-duration-fast: 140ms;
+  --otto-duration-base: 220ms;
+  --otto-duration-slow: 360ms;
+  --otto-easing-standard: cubic-bezier(0.2, 0, 0, 1);
+  --otto-easing-enter: cubic-bezier(0, 0, 0, 1);
+  --otto-easing-exit: cubic-bezier(0.3, 0, 1, 1);
+  --otto-sidebar-width: 248px;
+  --otto-titlebar-height: 52px;
+  color-scheme: light dark;
+  --otto-color-window: #F5F5F7;
+  --otto-color-sidebar: rgba(236, 236, 240, 0.72);
+  --otto-color-surface: #FFFFFF;
+  --otto-color-surface-raised: #FFFFFF;
+  --otto-color-fill-hover: rgba(17, 17, 20, 0.05);
+  --otto-color-fill-selected: rgba(17, 17, 20, 0.08);
+  --otto-color-border-subtle: rgba(17, 17, 20, 0.08);
+  --otto-color-border-strong: rgba(17, 17, 20, 0.16);
+  --otto-color-text-primary: #111114;
+  --otto-color-text-secondary: rgba(17, 17, 20, 0.62);
+  --otto-color-text-tertiary: rgba(17, 17, 20, 0.42);
+  --otto-color-text-on-accent: #FFFFFF;
+  --otto-color-focus-ring: rgba(64, 98, 240, 0.5);
+  --otto-color-success: #1E9E5A;
+  --otto-color-warning: #B88A00;
+  --otto-color-danger: #D93838;
+  --otto-shadow-sm: 0 1px 2px rgba(17, 17, 20, 0.06);
+  --otto-shadow-md: 0 1px 2px rgba(17, 17, 20, 0.04), 0 4px 16px rgba(17, 17, 20, 0.06);
+  --otto-shadow-lg: 0 2px 4px rgba(17, 17, 20, 0.04), 0 16px 48px rgba(17, 17, 20, 0.12);
+}
+
+:root {
+  --otto-accent: #111114;
+  --otto-accent-soft: rgba(17, 17, 20, 0.08);
+  --otto-accent-text: #111114;
+}
+[data-workspace='playbook'] {
+  --otto-accent: #4062F0;
+  --otto-accent-soft: rgba(64, 98, 240, 0.1);
+  --otto-accent-text: #2F4FD6;
+}
+[data-workspace='lauf'] {
+  --otto-accent: #13875F;
+  --otto-accent-soft: rgba(19, 135, 95, 0.1);
+  --otto-accent-text: #0E7350;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --otto-color-window: #161618;
+    --otto-color-sidebar: rgba(30, 30, 34, 0.62);
+    --otto-color-surface: #1C1C1F;
+    --otto-color-surface-raised: #242428;
+    --otto-color-fill-hover: rgba(242, 242, 244, 0.06);
+    --otto-color-fill-selected: rgba(242, 242, 244, 0.1);
+    --otto-color-border-subtle: rgba(242, 242, 244, 0.08);
+    --otto-color-border-strong: rgba(242, 242, 244, 0.16);
+    --otto-color-text-primary: #F2F2F4;
+    --otto-color-text-secondary: rgba(242, 242, 244, 0.64);
+    --otto-color-text-tertiary: rgba(242, 242, 244, 0.42);
+    --otto-color-text-on-accent: #FFFFFF;
+    --otto-color-focus-ring: rgba(108, 134, 255, 0.55);
+    --otto-color-success: #3CC27A;
+    --otto-color-warning: #E0B53A;
+    --otto-color-danger: #FF5F5A;
+    --otto-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --otto-shadow-md: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(0, 0, 0, 0.35);
+    --otto-shadow-lg: 0 2px 4px rgba(0, 0, 0, 0.3), 0 16px 48px rgba(0, 0, 0, 0.5);
+  }
+
+  :root {
+    --otto-accent: #F2F2F4;
+    --otto-accent-soft: rgba(242, 242, 244, 0.1);
+    --otto-accent-text: #F2F2F4;
+  }
+  [data-workspace='playbook'] {
+    --otto-accent: #6C86FF;
+    --otto-accent-soft: rgba(108, 134, 255, 0.16);
+    --otto-accent-text: #9AADFF;
+  }
+  [data-workspace='lauf'] {
+    --otto-accent: #34C08F;
+    --otto-accent-soft: rgba(52, 192, 143, 0.16);
+    --otto-accent-text: #6FD9B2;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --otto-duration-instant: 0ms;
+    --otto-duration-fast: 0ms;
+    --otto-duration-base: 0ms;
+    --otto-duration-slow: 0ms;
+  }
+}

@@ -1,0 +1,14 @@
+<!-- Otto horizontal lockup: mark + wordmark. Mark height = wordmark height; gap = 0.5 × mark. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 252 64">
+  <g fill="currentColor">
+    <path d="M29 6.174A26 26 0 0 0 29 57.826L29 46.697A15 15 0 0 1 29 17.303Z"/>
+    <path d="M35 6.174A26 26 0 0 1 35 57.826L35 46.697A15 15 0 0 0 35 17.303Z"/>
+  </g>
+  <g transform="translate(86 2) scale(.9) translate(0 -8)" fill="none" stroke="currentColor" stroke-width="7.5">
+    <circle cx="20" cy="44" r="16"/>
+    <path d="M62 14V50A10 10 0 0 0 72 60"/>
+    <path d="M98 14V50A10 10 0 0 1 88 60"/>
+    <path d="M50 28.25H110"/>
+    <circle cx="140" cy="44" r="16"/>
+  </g>
+</svg>

@@ -1,0 +1,43 @@
+{
+  "extends": ["stylelint-config-standard"],
+  "plugins": ["stylelint-declaration-strict-value"],
+  "ignoreFiles": ["src/design/tokens.css", "dist/**"],
+  "rules": {
+    "selector-class-pattern": "^[a-z][a-zA-Z0-9]*$",
+    "scale-unlimited/declaration-strict-value": [
+      [
+        "/color$/",
+        "fill",
+        "stroke",
+        "background",
+        "box-shadow",
+        "/^padding/",
+        "/^margin/",
+        "gap",
+        "row-gap",
+        "column-gap",
+        "border-radius",
+        "font-size",
+        "font-family",
+        "line-height",
+        "transition-duration"
+      ],
+      {
+        "ignoreValues": [
+          "0",
+          "auto",
+          "none",
+          "inherit",
+          "currentcolor",
+          "currentColor",
+          "transparent",
+          "100%",
+          "50%",
+          "/^calc\\(var\\(--otto-[a-z0-9-]+\\) \\* -?[0-9.]+\\)$/"
+        ],
+        "ignoreFunctions": false,
+        "message": "Use a design token (var(--otto-*)) instead of a raw value. See src/design/tokens.ts."
+      }
+    ]
+  }
+}

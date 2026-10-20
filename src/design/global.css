@@ -1,0 +1,44 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+html {
+  background: var(--otto-color-window);
+  color: var(--otto-color-text-primary);
+  font-family: var(--otto-font-sans);
+  font-size: var(--otto-type-body-size);
+  line-height: var(--otto-type-body-line);
+  letter-spacing: var(--otto-type-body-tracking);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizelegibility;
+}
+
+/* Let native vibrancy show through inside the app shell. */
+html[data-shell='tauri'] {
+  background: transparent;
+}
+
+/* Native Mac apps don't select chrome text or show a text cursor on labels. */
+body {
+  cursor: default;
+  user-select: none;
+}
+
+:focus-visible {
+  outline: 3px solid var(--otto-color-focus-ring);
+  outline-offset: 1px;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}

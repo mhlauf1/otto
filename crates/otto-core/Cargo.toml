@@ -1,0 +1,17 @@
+[package]
+name = "otto-core"
+description = "Otto's isolation, session and workspace logic. Deliberately free of Tauri so it can be tested headless."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish = false
+
+[dependencies]
+serde.workspace = true
+specta.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

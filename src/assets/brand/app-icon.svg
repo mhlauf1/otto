@@ -1,0 +1,20 @@
+<!-- Otto app icon (macOS grid: 824px body inset 100px on a 1024 canvas). Source for `pnpm tauri icon`. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3A3A40"/>
+      <stop offset="1" stop-color="#17171A"/>
+    </linearGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity=".22"/>
+      <stop offset=".5" stop-color="#FFFFFF" stop-opacity=".04"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity=".08"/>
+    </linearGradient>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#body)"/>
+  <rect x="101.5" y="101.5" width="821" height="821" rx="183.5" fill="none" stroke="url(#rim)" stroke-width="3"/>
+  <g transform="translate(512 512) scale(8) translate(-32 -32)" fill="#FFFFFF">
+    <path d="M29 6.174A26 26 0 0 0 29 57.826L29 46.697A15 15 0 0 1 29 17.303Z"/>
+    <path d="M35 6.174A26 26 0 0 1 35 57.826L35 46.697A15 15 0 0 0 35 17.303Z"/>
+  </g>
+</svg>

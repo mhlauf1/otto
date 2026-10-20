@@ -1,0 +1,10 @@
+dist
+target
+src-tauri/target
+src-tauri/gen
+src/bindings.ts
+pnpm-lock.yaml
+docs/SPEC.md
+playwright-report
+test-results
+src/design/tokens.css
