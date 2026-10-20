@@ -111,6 +111,46 @@
   font-size: var(--otto-type-footnote-size);
 }
 
+.identityFooter {
+  display: flex;
+  align-items: center;
+  gap: var(--otto-space-2);
+  margin-top: auto;
+  padding: var(--otto-space-2);
+  border-radius: var(--otto-radius-md);
+}
+
+.avatar {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--otto-radius-full);
+  background: var(--otto-accent);
+  color: var(--otto-color-text-on-accent);
+  font-size: var(--otto-type-caption-size);
+  font-weight: var(--otto-type-headline-weight);
+}
+
+.identityText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.identityName {
+  font-weight: var(--otto-type-headline-weight);
+}
+
+.identityEmail {
+  overflow: hidden;
+  color: var(--otto-color-text-tertiary);
+  font-size: var(--otto-type-caption-size);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .sidebarFooter {
   margin: auto 0 0;
   padding: 0 var(--otto-space-2);

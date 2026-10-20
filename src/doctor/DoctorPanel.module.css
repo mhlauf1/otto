@@ -9,6 +9,10 @@
   background: var(--otto-color-surface);
 }
 
+.header > div {
+  min-width: 0;
+}
+
 .header {
   display: flex;
   align-items: flex-start;
@@ -24,13 +28,21 @@
   letter-spacing: var(--otto-type-title3-tracking);
 }
 
-.subtitle {
+.subtitle,
+.email {
   margin: var(--otto-space-0-5) 0 0;
   color: var(--otto-color-text-secondary);
   font-size: var(--otto-type-footnote-size);
   line-height: var(--otto-type-footnote-line);
-  overflow-wrap: anywhere;
   user-select: text;
+}
+
+.email {
+  margin: 0;
+  overflow: hidden;
+  color: var(--otto-color-text-tertiary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .rerun {

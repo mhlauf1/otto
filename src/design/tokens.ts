@@ -79,6 +79,8 @@ export interface Palette {
   warning: string;
   danger: string;
   terminal: string;
+  /** Dims the window behind dialogs. */
+  scrim: string;
 }
 
 export const color: { light: Palette; dark: Palette } = {
@@ -100,6 +102,7 @@ export const color: { light: Palette; dark: Palette } = {
     warning: '#B88A00',
     danger: '#D93838',
     terminal: '#141416',
+    scrim: 'rgba(17, 17, 20, 0.18)',
   },
   dark: {
     window: '#161618',
@@ -119,6 +122,7 @@ export const color: { light: Palette; dark: Palette } = {
     warning: '#E0B53A',
     danger: '#FF5F5A',
     terminal: '#141416',
+    scrim: 'rgba(0, 0, 0, 0.45)',
   },
 };
 
@@ -154,11 +158,16 @@ export const shadow = {
     sm: '0 1px 2px rgba(17, 17, 20, 0.06)',
     md: '0 1px 2px rgba(17, 17, 20, 0.04), 0 4px 16px rgba(17, 17, 20, 0.06)',
     lg: '0 2px 4px rgba(17, 17, 20, 0.04), 0 16px 48px rgba(17, 17, 20, 0.12)',
+    /** Raised field with the accent focus glow; follows the active workspace tint. */
+    focus:
+      '0 1px 2px rgba(17, 17, 20, 0.04), 0 4px 16px rgba(17, 17, 20, 0.06), 0 0 0 3px var(--otto-accent-soft)',
   },
   dark: {
     sm: '0 1px 2px rgba(0, 0, 0, 0.4)',
     md: '0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(0, 0, 0, 0.35)',
     lg: '0 2px 4px rgba(0, 0, 0, 0.3), 0 16px 48px rgba(0, 0, 0, 0.5)',
+    focus:
+      '0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(0, 0, 0, 0.35), 0 0 0 3px var(--otto-accent-soft)',
   },
 } as const;
 

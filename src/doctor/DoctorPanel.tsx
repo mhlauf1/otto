@@ -37,8 +37,9 @@ export function DoctorPanel({ workspace, report, onRerun, onSignIn }: DoctorPane
       <header className={styles.header}>
         <div>
           <h2 className={styles.title}>Identity</h2>
-          <p className={styles.subtitle}>
-            {workspace.identity.githubUser} · {workspace.identity.gitEmail}
+          <p className={styles.subtitle}>{workspace.identity.githubUser}</p>
+          <p className={styles.email} title={workspace.identity.gitEmail}>
+            {workspace.identity.gitEmail}
           </p>
         </div>
         <button

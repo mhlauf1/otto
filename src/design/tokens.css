@@ -88,9 +88,11 @@
   --otto-color-warning: #B88A00;
   --otto-color-danger: #D93838;
   --otto-color-terminal: #141416;
+  --otto-color-scrim: rgba(17, 17, 20, 0.18);
   --otto-shadow-sm: 0 1px 2px rgba(17, 17, 20, 0.06);
   --otto-shadow-md: 0 1px 2px rgba(17, 17, 20, 0.04), 0 4px 16px rgba(17, 17, 20, 0.06);
   --otto-shadow-lg: 0 2px 4px rgba(17, 17, 20, 0.04), 0 16px 48px rgba(17, 17, 20, 0.12);
+  --otto-shadow-focus: 0 1px 2px rgba(17, 17, 20, 0.04), 0 4px 16px rgba(17, 17, 20, 0.06), 0 0 0 3px var(--otto-accent-soft);
 }
 
 :root {
@@ -128,9 +130,11 @@
     --otto-color-warning: #E0B53A;
     --otto-color-danger: #FF5F5A;
     --otto-color-terminal: #141416;
+    --otto-color-scrim: rgba(0, 0, 0, 0.45);
     --otto-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
     --otto-shadow-md: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(0, 0, 0, 0.35);
     --otto-shadow-lg: 0 2px 4px rgba(0, 0, 0, 0.3), 0 16px 48px rgba(0, 0, 0, 0.5);
+    --otto-shadow-focus: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(0, 0, 0, 0.35), 0 0 0 3px var(--otto-accent-soft);
   }
 
   :root {

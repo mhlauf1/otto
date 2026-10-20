@@ -1,9 +1,11 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AgentKind, DoctorReport, Workspace } from '../bindings';
 import { OttoMark } from '../brand/OttoMark';
 import { OttoWordmark } from '../brand/OttoWordmark';
+import { Composer, type ComposerHandle } from '../composer/Composer';
 import { DoctorPanel } from '../doctor/DoctorPanel';
+import { CommandPalette, type PaletteAction } from '../palette/CommandPalette';
 import { SessionError, useSessions } from '../sessions/registry';
 import { TerminalView } from '../sessions/TerminalView';
 import { useWorkspaceUi } from '../state/workspace';
@@ -45,8 +47,11 @@ export function App() {
 
   const { sessions, activeByWorkspace, open, close, select } = useSessions();
   const [sessionError, setSessionError] = useState<string | null>(null);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const composer = useRef<ComposerHandle>(null);
   const activeSessionId = active ? activeByWorkspace[active.id] : undefined;
   const workspaceSessions = sessions.filter((s) => s.info.workspaceId === active?.id);
+  const activeSession = sessions.find((s) => s.info.id === activeSessionId);
 
   // When a sign-in flow ends, re-check who that workspace is signed in as.
   useEffect(() => {
@@ -73,6 +78,16 @@ export function App() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!e.metaKey) return;
+      if (!e.shiftKey && e.code === 'KeyK') {
+        e.preventDefault();
+        setPaletteOpen((o) => !o);
+        return;
+      }
+      if (!e.shiftKey && e.code === 'KeyL' && activeSession) {
+        e.preventDefault();
+        composer.current?.focus();
+        return;
+      }
       if (e.shiftKey && e.code === 'KeyI') {
         e.preventDefault();
         toggleInspector();
@@ -121,6 +136,53 @@ export function App() {
     setActive(w.id);
     void queryClient.invalidateQueries({ queryKey: queryKeys.doctor(w.id) });
   };
+
+  const paletteActions: PaletteAction[] = [
+    ...NEW_SESSION.map(({ agent, label }) => ({
+      id: `new-${agent}`,
+      group: `New in ${active.name}`,
+      label: `New ${label} session`,
+      keywords: agent === 'shell' ? 'terminal zsh' : 'agent',
+      ...(agent === 'claude' ? { shortcut: '⌘T' } : {}),
+      run: () => {
+        void startSession(active.id, agent);
+      },
+    })),
+    ...list.map((w, i) => ({
+      id: `ws-${w.id}`,
+      group: 'Workspaces',
+      label: `Switch to ${w.name}`,
+      keywords: w.identity.githubUser,
+      shortcut: `⌘${String(i + 1)}`,
+      run: () => {
+        switchTo(w);
+      },
+    })),
+    ...sessions.map((s) => {
+      const ws = list.find((w) => w.id === s.info.workspaceId);
+      return {
+        id: `go-${s.info.id}`,
+        group: 'Sessions',
+        label: `${s.info.title} · ${ws?.name ?? ''}`,
+        keywords: 'jump go',
+        run: () => {
+          if (ws) setActive(ws.id);
+          select(s.info.workspaceId, s.info.id);
+        },
+      };
+    }),
+    {
+      id: 'doctor',
+      group: 'Identity',
+      label: `Run Identity Doctor for ${active.name}`,
+      keywords: 'check who signed in github',
+      shortcut: '⌘⇧I',
+      run: () => {
+        if (!inspectorOpen) toggleInspector();
+        void doctor.refetch();
+      },
+    },
+  ];
 
   return (
     <div
@@ -214,7 +276,15 @@ export function App() {
           </div>
         </nav>
 
-        <p className={styles.sidebarFooter}>Milestone 2 · Terminal sessions</p>
+        <div className={styles.identityFooter} data-tint={active.tint}>
+          <span className={styles.avatar} aria-hidden>
+            {active.name.slice(0, 1)}
+          </span>
+          <span className={styles.identityText}>
+            <span className={styles.identityName}>{active.identity.githubUser}</span>
+            <span className={styles.identityEmail}>{active.identity.gitEmail}</span>
+          </span>
+        </div>
       </aside>
 
       <main className={styles.main}>
@@ -247,6 +317,14 @@ export function App() {
           {sessions.map((s) => (
             <TerminalView key={s.info.id} session={s} visible={s.info.id === activeSessionId} />
           ))}
+          {activeSession ? (
+            <Composer
+              key={activeSession.info.id}
+              ref={composer}
+              workspace={active}
+              session={activeSession}
+            />
+          ) : null}
         </div>
 
         {activeSessionId === undefined ? (
@@ -259,12 +337,14 @@ export function App() {
             <h1 className={styles.headline}>Every identity, signed in. Nothing crossing over.</h1>
             <p className={styles.subhead}>
               You’re in <strong className={styles.accentText}>{active.name}</strong> as{' '}
-              {active.identity.githubUser}. Press ⌘T for a Claude session, ⌘1 or ⌘2 to switch.
+              {active.identity.githubUser}. Press ⌘T for a Claude session or ⌘K for everything else.
             </p>
             <CoreStatus />
           </section>
         ) : null}
       </main>
+
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} actions={paletteActions} />
 
       {inspectorOpen ? (
         <DoctorPanel

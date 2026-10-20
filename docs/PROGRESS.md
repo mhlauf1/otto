@@ -2,7 +2,18 @@
 
 Newest entries first.
 
-## Current milestone: M2 — Terminal sessions ✅ (needs Mike to sign in)
+## Current milestone: M3 — Shell and design pass ✅
+
+### Definition of done
+
+- [x] Mobbin references (7) recorded in DESIGN.md before building.
+- [x] Command palette ⌘K: new session, switch workspace, jump to session, run Identity Doctor. "Open context" arrives with M4.
+- [x] Dictation-friendly composer: ⌘↵ sends as bracketed paste, esc to terminal, ⌘L focus. ⌥↵ arrives with the queue (M5).
+- [x] Sidebar identity footer; all values from tokens.
+- [x] Light and dark screenshots with a QA comparison note; two issues found and fixed.
+- [x] Tests: 10 unit, 3 e2e (palette included), Rust and isolation suites unchanged and green.
+
+## Previous milestone: M2 — Terminal sessions ✅ (Mike signed in to all four accounts, all green)
 
 ### Definition of done
 
@@ -11,7 +22,7 @@ Newest entries first.
 - [x] Claude (with a fixed `--session-id`), Codex and Shell sessions; ⌘T new Claude session, ⌘W close.
 - [x] Sign-in flows: Identity Doctor "Sign in" buttons run `claude auth login` / `codex login` inside the workspace.
 - [x] Codex CLI 0.163 installed (Node 24, nvm).
-- [ ] **Mike:** sign in to Claude and Codex in both workspaces from the Identity panel, then confirm Identity Doctor is fully green.
+- [x] Mike signed in to Claude and Codex in both workspaces. Identity Doctor is fully green (verified in the audit log, 2026-10-20 13:23).
 
 ## Previous milestone: M1 — Isolation core ✅ (CI green)
 

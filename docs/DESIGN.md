@@ -101,3 +101,39 @@ This is a functional panel on the right (320px), toggled with ⌘⇧I or the tit
 - **Terminal surface:** always graphite-dark (`terminal` tokens), inset in the content area with a 12px radius and a medium shadow. This is the "calm light shell framing a dark terminal" from the PlanetScale reference. The ANSI palette is tuned to the brand: blue is the dark-mode cobalt and green is near the success green. There's no orange.
 - **Sidebar:** a Sessions section per workspace with a running dot in the workspace accent, plus "+ Claude / + Codex / + Shell" chips.
 - **Identity Doctor:** a red Claude or Codex row shows an accent "Sign in to … as <Workspace>" button that opens the sign-in flow in a terminal.
+
+---
+
+## M3 — Shell and design pass
+
+### Mobbin references
+
+| Reference                                                                                     | Borrowed                                                                                                 |
+| --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| [Supabase — command palette](https://mobbin.com/screens/9b4725f5-e038-4fc7-98ad-64a59f74b4d7) | Sectioned groups with small caption headings and shortcut hints right-aligned in bordered keycaps        |
+| [Magnific — command palette](https://mobbin.com/screens/e22e26e2-f813-4f1e-beda-43c9ecf26419) | A footer of key hints (↑↓ navigate · ↵ select · esc close) and a soft filled row highlight               |
+| [Navattic — command palette](https://mobbin.com/screens/c65971cf-c4ea-45e9-99a5-555930cb5d73) | Calm light panel, generous radius, a quiet dimmed backdrop rather than a heavy blur                      |
+| [Ferndesk — agent composer](https://mobbin.com/screens/b2c10835-8ff6-4283-9462-0e2a5b38552d)  | A "Connected to" pill in the composer header, which becomes Otto's identity pill (`Playbook · mikelauf`) |
+| [Cursor — agent composer](https://mobbin.com/screens/924cf1be-b47e-4957-8ac7-426c93ee8835)    | A slim controls row under the field, with a round send button on the right                               |
+| [Langdock — composer](https://mobbin.com/screens/b66870ae-8d47-493d-b1b6-e6c01173ad96)        | A tall multi-line field that grows with the text, suited to long dictated prompts                        |
+| [LangChain — sidebar footer](https://mobbin.com/screens/ef3381e2-522c-48f4-94af-96e5c26004b2) | The identity block (avatar, name, email) pinned to the bottom of the sidebar                             |
+
+### What was built
+
+- **Command palette (⌘K):**
+  - Radix Dialog, a fuzzy match (prefix > word start > subsequence), and groups when browsing (New in <workspace>, Workspaces, Sessions, Identity). Search results are one ranked list.
+  - Full keyboard support, and a combobox/listbox ARIA pattern for VoiceOver.
+- **Composer:**
+  - Sits under the active terminal and grows to 240px.
+  - The border and glow take the workspace accent on focus.
+  - **⌘↵** sends as a bracketed paste followed by Return, so dictated multi-line prompts arrive whole. **esc** returns to the terminal, and **⌘L** focuses the composer.
+  - **⌥↵ (queue) ships with the queue in M5**; it isn't stubbed here.
+- **Sidebar:** workspaces with ✓/✕ push safety, sessions with a running dot, new-session chips, and an identity footer in the workspace accent.
+
+### Design QA (SPEC §6.5)
+
+`pnpm test:e2e` writes `hello-{light,dark,lauf}.png` and `palette-{light,dark}.png`. Notes against the references:
+
+- **Palette:** matches Supabase's grouping and keycaps, and Magnific's footer. The first QA pass found the global focus outline clipped under the input as a thick accent bar; it was removed, since the open palette is the focus indicator.
+- **Identity panel:** the first pass wrapped the email mid-word. Now the user sits on one line and the email truncates with the full value in a tooltip.
+- **Dark mode:** the panel uses `surfaceRaised` over a darker scrim (0.45), so it lifts without a border glow.

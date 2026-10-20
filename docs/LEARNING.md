@@ -115,3 +115,19 @@ React components unmount and remount, for example when you switch workspace. If 
 ### Channels
 
 A Tauri command returns once. A **Channel** is a pipe the frontend hands to a command, so Rust can keep sending messages (output, then an exit event) for as long as the session lives.
+
+---
+
+## Chapter 3 — The shell (M3)
+
+### Radix primitives
+
+Radix gives you _behaviour_ without _looks_: focus trapping, `esc` to close, screen-reader roles, and returning focus to where you were. The command palette uses Radix `Dialog` for that plumbing, and every visual is ours (CSS Modules plus tokens). That's how you get native-feeling accessibility without a generic component-library look.
+
+### Bracketed paste
+
+When you paste into a terminal, the terminal wraps the text in invisible markers (`ESC[200~ … ESC[201~`). Programs like Claude Code see the markers and treat everything inside as one block, newlines included, instead of each newline meaning "submit". The composer sends dictated text the same way, then presses Return.
+
+### The React Compiler lint
+
+`react-hooks` now enforces "don't mutate during render". The palette first tracked "last group seen" in a variable reassigned during rendering. The fix computes headings ahead of time in `useMemo`, so rendering stays a pure function of state.
