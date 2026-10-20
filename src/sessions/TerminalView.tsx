@@ -34,14 +34,21 @@ export function TerminalView({ session, visible }: TerminalViewProps) {
   useEffect(() => {
     const el = host.current;
     if (!el || !visible) return;
+    let frame = 0;
+    // Fit on the next frame: fitting inside the observer callback resizes the
+    // element again and trips "ResizeObserver loop completed…".
     const fit = () => {
-      if (el.clientWidth > 0 && el.clientHeight > 0) session.fit.fit();
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        if (el.clientWidth > 0 && el.clientHeight > 0) session.fit.fit();
+      });
     };
     fit();
     session.term.focus();
     const observer = new ResizeObserver(fit);
     observer.observe(el);
     return () => {
+      cancelAnimationFrame(frame);
       observer.disconnect();
     };
   }, [session, visible]);
