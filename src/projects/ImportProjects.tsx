@@ -1,7 +1,8 @@
 import * as Dialog from '@radix-ui/react-dialog';
 import { useQueryClient } from '@tanstack/react-query';
+import { open as pickFolder } from '@tauri-apps/plugin-dialog';
 import { useMemo, useState } from 'react';
-import type { DiscoveredRepo, Workspace } from '../bindings';
+import { commands, type DiscoveredRepo, type Workspace } from '../bindings';
 import { FriendlyError, queryKeys, registerProject, useDiscoveredProjects } from '../app/queries';
 import styles from '../ui/Sheet.module.css';
 
@@ -11,62 +12,89 @@ interface ImportProjectsProps {
   workspaces: Workspace[];
 }
 
-/** Choice per repo: a workspace id, or null to skip. */
-type Choices = Record<string, string | null>;
+const isImportable = (r: DiscoveredRepo) =>
+  !r.registeredTo && (r.suggestion.kind === 'workspace' || r.suggestion.kind === 'needsChoice');
 
-function suggestedChoice(repo: DiscoveredRepo): string | null {
-  if (repo.registeredTo) return null;
-  return repo.suggestion.kind === 'workspace' ? repo.suggestion.workspace : null;
-}
+const tidyPath = (path: string) => path.replace(/^\/Users\/[^/]+/, '~');
 
 /**
- * Auto-discover + confirm (decided with Mike 2026-10-20). Otto sorts repos by GitHub
- * owner; Mike confirms once. Repos with no remote need a workspace picked by hand.
+ * Opt-in import (Mike, 2026-10-20): nothing is pre-selected. Tick what you want.
+ * Matched repos already know their workspace from the GitHub owner; repos with no
+ * remote need one picked. "Choose folder…" adds a repo outside the scanned places.
  */
 export function ImportProjects({ open, onOpenChange, workspaces }: ImportProjectsProps) {
   const discovered = useDiscoveredProjects(open);
   const queryClient = useQueryClient();
-  const [overrides, setOverrides] = useState<Choices>({});
+  /** Ticked repos → chosen workspace ('' until picked, for repos with no remote). */
+  const [selected, setSelected] = useState<Record<string, string>>({});
+  const [added, setAdded] = useState<DiscoveredRepo[]>([]);
+  const [query, setQuery] = useState('');
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [pickError, setPickError] = useState<string | null>(null);
 
-  const repos = useMemo(() => discovered.data ?? [], [discovered.data]);
-  const choiceFor = (repo: DiscoveredRepo) =>
-    repo.path in overrides ? (overrides[repo.path] ?? null) : suggestedChoice(repo);
+  const all = useMemo(() => {
+    const scanned = discovered.data ?? [];
+    const extra = added.filter((a) => !scanned.some((s) => s.path === a.path));
+    return [...extra, ...scanned];
+  }, [discovered.data, added]);
 
-  const groups = useMemo(() => {
-    const byKind = (pred: (r: DiscoveredRepo) => boolean) =>
-      repos.filter((r) => !r.registeredTo && pred(r));
-    return [
-      { title: 'Matched by GitHub owner', repos: byKind((r) => r.suggestion.kind === 'workspace') },
-      {
-        title: 'No remote: pick a workspace (pushes stay locked)',
-        repos: byKind((r) => r.suggestion.kind === 'needsChoice'),
-      },
-      { title: 'Already imported', repos: repos.filter((r) => r.registeredTo) },
-      {
-        title: 'Can’t be imported',
-        repos: byKind((r) => r.suggestion.kind === 'notYours' || r.suggestion.kind === 'blocked'),
-      },
-    ].filter((g) => g.repos.length > 0);
-  }, [repos]);
+  const matches = (r: DiscoveredRepo) => {
+    const q = query.trim().toLowerCase();
+    return !q || `${r.name} ${r.path} ${r.remoteUrl ?? ''}`.toLowerCase().includes(q);
+  };
+  const importable = all.filter((r) => isImportable(r) && matches(r));
+  const imported = all.filter((r) => r.registeredTo && matches(r));
+  const blocked = all.filter((r) => !r.registeredTo && !isImportable(r) && matches(r));
 
-  const toImport = repos.filter((r) => !r.registeredTo && choiceFor(r) !== null);
+  const defaultWorkspace = (r: DiscoveredRepo) =>
+    r.suggestion.kind === 'workspace' ? r.suggestion.workspace : '';
+
+  const toggle = (r: DiscoveredRepo) => {
+    setSelected((s) =>
+      r.path in s
+        ? Object.fromEntries(Object.entries(s).filter(([p]) => p !== r.path))
+        : { ...s, [r.path]: defaultWorkspace(r) },
+    );
+  };
+
+  const ready = Object.entries(selected).filter(([, ws]) => ws !== '');
+  const missingWorkspace = Object.values(selected).filter((ws) => ws === '').length;
+
+  const chooseFolder = async () => {
+    setPickError(null);
+    const path = await pickFolder({
+      directory: true,
+      multiple: false,
+      title: 'Choose a project folder',
+    });
+    if (typeof path !== 'string') return;
+    const r = await commands.inspectProject(path);
+    if (r.status === 'error') {
+      setPickError(r.error.message);
+      return;
+    }
+    setAdded((a) => [r.data, ...a.filter((x) => x.path !== r.data.path)]);
+    setQuery('');
+    if (isImportable(r.data)) {
+      setSelected((s) => ({ ...s, [r.data.path]: defaultWorkspace(r.data) }));
+    }
+  };
 
   const save = async () => {
     setSaving(true);
     const failed: Record<string, string> = {};
-    for (const repo of toImport) {
-      const ws = choiceFor(repo);
-      if (!ws) continue;
+    for (const [path, ws] of ready) {
+      const repo = all.find((r) => r.path === path);
       try {
-        await registerProject(ws, repo.path, repo.suggestion.kind === 'needsChoice');
+        await registerProject(ws, path, repo?.suggestion.kind === 'needsChoice');
       } catch (e) {
-        failed[repo.path] = e instanceof FriendlyError ? e.message : 'Couldn’t import.';
+        failed[path] = e instanceof FriendlyError ? e.message : 'Couldn’t import.';
       }
     }
     setErrors(failed);
     setSaving(false);
+    setSelected((s) => Object.fromEntries(Object.entries(s).filter(([p]) => p in failed)));
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: queryKeys.discovered }),
       ...workspaces.map((w) =>
@@ -76,7 +104,53 @@ export function ImportProjects({ open, onOpenChange, workspaces }: ImportProject
     if (Object.keys(failed).length === 0) onOpenChange(false);
   };
 
-  const wsName = (id: string | null) => workspaces.find((w) => w.id === id)?.name ?? id ?? '';
+  const wsName = (id: string | null) => workspaces.find((w) => w.id === id)?.name ?? '';
+
+  const row = (repo: DiscoveredRepo) => {
+    const checked = repo.path in selected;
+    const choice = selected[repo.path] ?? defaultWorkspace(repo);
+    return (
+      <li key={repo.path} className={styles.row}>
+        <label className={styles.pick}>
+          <input
+            type="checkbox"
+            checked={checked}
+            onChange={() => {
+              toggle(repo);
+            }}
+            aria-label={`Import ${repo.name}`}
+          />
+          <span className={styles.repo}>
+            <span className={styles.name}>{repo.name}</span>
+            <span className={styles.meta} title={repo.path}>
+              {tidyPath(repo.path)}
+            </span>
+            {errors[repo.path] ? <span className={styles.reason}>{errors[repo.path]}</span> : null}
+          </span>
+        </label>
+        {repo.suggestion.kind === 'workspace' ? (
+          <span className={styles.badge}>{wsName(repo.suggestion.workspace)}</span>
+        ) : (
+          <select
+            className={styles.select}
+            aria-label={`Workspace for ${repo.name}`}
+            value={choice}
+            onChange={(e) => {
+              const ws = e.target.value;
+              setSelected((s) => ({ ...s, [repo.path]: ws }));
+            }}
+          >
+            <option value="">Pick workspace</option>
+            {workspaces.map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.name}
+              </option>
+            ))}
+          </select>
+        )}
+      </li>
+    );
+  };
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -86,9 +160,34 @@ export function ImportProjects({ open, onOpenChange, workspaces }: ImportProject
           <header className={styles.header}>
             <Dialog.Title className={styles.title}>Import projects</Dialog.Title>
             <Dialog.Description className={styles.description}>
-              Otto found these git repos and sorted them by GitHub owner. Each project belongs to
-              exactly one workspace.
+              Tick the projects you want. Otto remembers where each folder is and puts it in the
+              workspace that owns it on GitHub.
             </Dialog.Description>
+            <div className={styles.toolbar}>
+              <input
+                className={styles.search}
+                placeholder="Search projects…"
+                value={query}
+                autoFocus
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                }}
+              />
+              <button
+                type="button"
+                className={styles.secondary}
+                onClick={() => {
+                  void chooseFolder();
+                }}
+              >
+                Choose folder…
+              </button>
+            </div>
+            {pickError ? (
+              <p className={styles.reason} role="alert">
+                {pickError}
+              </p>
+            ) : null}
           </header>
 
           <div className={styles.body}>
@@ -100,83 +199,77 @@ export function ImportProjects({ open, onOpenChange, workspaces }: ImportProject
                   : 'Couldn’t scan for projects.'}
               </p>
             ) : null}
-            {groups.map((group) => (
-              <section key={group.title} className={styles.group}>
-                <h3 className={styles.groupTitle}>
-                  {group.title} <span className={styles.count}>{group.repos.length}</span>
-                </h3>
+
+            {importable.length > 0 ? (
+              <ul className={styles.list}>{importable.map(row)}</ul>
+            ) : discovered.isSuccess ? (
+              <p className={styles.notice}>No projects match “{query}”.</p>
+            ) : null}
+
+            {imported.length > 0 ? (
+              <details className={styles.group}>
+                <summary className={styles.groupTitle}>
+                  Already imported <span className={styles.count}>{imported.length}</span>
+                </summary>
                 <ul className={styles.list}>
-                  {group.repos.map((repo) => {
-                    const importable =
-                      !repo.registeredTo &&
-                      (repo.suggestion.kind === 'workspace' ||
-                        repo.suggestion.kind === 'needsChoice');
-                    const choice = choiceFor(repo);
-                    return (
-                      <li key={repo.path} className={styles.row}>
-                        <div className={styles.repo}>
-                          <span className={styles.name}>{repo.name}</span>
-                          <span className={styles.meta} title={repo.path}>
-                            {repo.remoteUrl ?? repo.path.replace(/^\/Users\/[^/]+/, '~')}
-                          </span>
-                          {repo.suggestion.kind === 'blocked' ? (
-                            <span className={styles.reason}>{repo.suggestion.reason}</span>
-                          ) : null}
-                          {repo.suggestion.kind === 'notYours' ? (
-                            <span className={styles.reason}>
-                              Owned by {repo.suggestion.owners.join(', ')}, which no workspace
-                              allows.
-                            </span>
-                          ) : null}
-                          {errors[repo.path] ? (
-                            <span className={styles.reason}>{errors[repo.path]}</span>
-                          ) : null}
-                        </div>
-                        {repo.registeredTo ? (
-                          <span className={styles.badge}>{wsName(repo.registeredTo)}</span>
-                        ) : importable ? (
-                          <select
-                            className={styles.select}
-                            aria-label={`Workspace for ${repo.name}`}
-                            value={choice ?? ''}
-                            onChange={(e) => {
-                              setOverrides((o) => ({ ...o, [repo.path]: e.target.value || null }));
-                            }}
-                          >
-                            <option value="">Skip</option>
-                            {workspaces
-                              .filter(
-                                (w) =>
-                                  repo.suggestion.kind === 'needsChoice' ||
-                                  (repo.suggestion.kind === 'workspace' &&
-                                    repo.suggestion.workspace === w.id),
-                              )
-                              .map((w) => (
-                                <option key={w.id} value={w.id}>
-                                  {w.name}
-                                </option>
-                              ))}
-                          </select>
-                        ) : null}
-                      </li>
-                    );
-                  })}
+                  {imported.map((r) => (
+                    <li key={r.path} className={styles.row}>
+                      <span className={styles.repo}>
+                        <span className={styles.name}>{r.name}</span>
+                        <span className={styles.meta}>{tidyPath(r.path)}</span>
+                      </span>
+                      <span className={styles.badge}>{wsName(r.registeredTo)}</span>
+                    </li>
+                  ))}
                 </ul>
-              </section>
-            ))}
+              </details>
+            ) : null}
+
+            {blocked.length > 0 ? (
+              <details className={styles.group}>
+                <summary className={styles.groupTitle}>
+                  Can’t be imported <span className={styles.count}>{blocked.length}</span>
+                </summary>
+                <ul className={styles.list}>
+                  {blocked.map((r) => (
+                    <li key={r.path} className={styles.row}>
+                      <span className={styles.repo}>
+                        <span className={styles.name}>{r.name}</span>
+                        <span className={styles.reason}>
+                          {r.suggestion.kind === 'blocked'
+                            ? r.suggestion.reason
+                            : r.suggestion.kind === 'notYours'
+                              ? `Owned by ${r.suggestion.owners.join(', ')}, which no workspace allows.`
+                              : ''}
+                        </span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            ) : null}
           </div>
 
           <footer className={styles.footer}>
+            {missingWorkspace > 0 ? (
+              <span className={styles.hint}>
+                Pick a workspace for {missingWorkspace} project{missingWorkspace === 1 ? '' : 's'}
+              </span>
+            ) : null}
             <Dialog.Close className={styles.secondary}>Cancel</Dialog.Close>
             <button
               type="button"
               className={styles.primary}
-              disabled={saving || toImport.length === 0}
+              disabled={saving || ready.length === 0 || missingWorkspace > 0}
               onClick={() => {
                 void save();
               }}
             >
-              {saving ? 'Importing…' : `Import ${String(toImport.length)} projects`}
+              {saving
+                ? 'Importing…'
+                : ready.length === 0
+                  ? 'Import'
+                  : `Import ${String(ready.length)} project${ready.length === 1 ? '' : 's'}`}
             </button>
           </footer>
         </Dialog.Content>

@@ -24,6 +24,7 @@ pub fn ipc() -> Builder<tauri::Wry> {
         commands::register_repo,
         commands::discover_projects,
         commands::list_projects,
+        commands::inspect_project,
         commands::open_session,
         commands::write_session,
         commands::resize_session,
@@ -63,6 +64,7 @@ pub fn run() {
 
     let ipc = ipc();
     let result = tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(ipc.invoke_handler())
         .setup(move |app| {
             ipc.mount_events(app);

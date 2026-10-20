@@ -183,3 +183,42 @@
   color: var(--otto-color-success);
   font-size: var(--otto-type-footnote-size);
 }
+
+/* Opt-in project import. */
+.toolbar {
+  display: flex;
+  gap: var(--otto-space-2);
+  margin-top: var(--otto-space-4);
+}
+
+.search {
+  flex: 1;
+  padding: var(--otto-space-1-5) var(--otto-space-3);
+  border: 1px solid var(--otto-color-border-strong);
+  border-radius: var(--otto-radius-md);
+  background: var(--otto-color-surface);
+  color: var(--otto-color-text-primary);
+  font: inherit;
+  user-select: text;
+}
+
+.pick {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--otto-space-3);
+  min-width: 0;
+  cursor: default;
+}
+
+.group > summary {
+  cursor: default;
+  padding: var(--otto-space-2) 0;
+}
+
+.hint {
+  margin-right: auto;
+  align-self: center;
+  color: var(--otto-color-text-tertiary);
+  font-size: var(--otto-type-footnote-size);
+}

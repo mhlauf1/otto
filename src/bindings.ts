@@ -24,6 +24,8 @@ export const commands = {
 	 */
 	discoverProjects: (roots: string[] | null) => typedError<DiscoveredRepo[], CommandError>(__TAURI_INVOKE("discover_projects", { roots })),
 	listProjects: (workspaceId: string) => typedError<Project[], CommandError>(__TAURI_INVOKE("list_projects", { workspaceId })),
+	/**  Classify one folder Mike picked by hand (outside the scanned locations). */
+	inspectProject: (path: string) => typedError<DiscoveredRepo, CommandError>(__TAURI_INVOKE("inspect_project", { path })),
 	/**
 	 *  Open an agent (or shell) in a real terminal inside the workspace's isolated
 	 *  environment, optionally inside one of its projects. Output streams to `on_event`.

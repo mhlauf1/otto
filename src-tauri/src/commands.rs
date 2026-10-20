@@ -151,6 +151,28 @@ pub async fn discover_projects(
     Ok(found)
 }
 
+/// Classify one folder Mike picked by hand (outside the scanned locations).
+#[tauri::command]
+#[specta::specta]
+pub async fn inspect_project(
+    state: State<'_, AppState>,
+    path: String,
+) -> Result<DiscoveredRepo, CommandError> {
+    let workspaces = state.store.workspaces().await.map_err(internal)?;
+    let host = state.host.clone();
+    let dir = PathBuf::from(&path);
+    if !dir.join(".git").exists() {
+        return Err(CommandError::Refused(format!(
+            "{path} isn't a git repository. Run `git init` there first, or pick the repo's top folder."
+        )));
+    }
+    let mut repo = tauri::async_runtime::spawn_blocking(move || classify(&host, &dir, &workspaces))
+        .await
+        .map_err(internal)?;
+    repo.registered_to = state.store.repo_owner(&repo.path).await.map_err(internal)?;
+    Ok(repo)
+}
+
 #[tauri::command]
 #[specta::specta]
 pub async fn list_projects(
