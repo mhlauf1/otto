@@ -36,6 +36,10 @@ export const commands = {
 	closeSession: (id: string) => __TAURI_INVOKE<boolean>("close_session", { id }),
 	/**  Sessions still running (for example after the window reloads). */
 	listSessions: () => __TAURI_INVOKE<SessionInfo[]>("list_sessions"),
+	/**  What can be copied from Mike's normal `~/.claude` setup into a workspace. */
+	claudeSetupInventory: () => typedError<SetupItem[], CommandError>(__TAURI_INVOKE("claude_setup_inventory")),
+	/**  Copy the chosen setup items into one workspace's Claude config. Copies only. */
+	importClaudeSetup: (workspaceId: string, itemIds: string[]) => typedError<string[], CommandError>(__TAURI_INVOKE("import_claude_setup", { workspaceId, itemIds })),
 };
 
 /* Types */
@@ -127,6 +131,18 @@ export type SessionInfo = {
 	/**  The project the session runs in; `None` means the home folder. */
 	projectPath: string | null,
 };
+
+export type SetupItem = {
+	/**  Stable id, e.g. `skill:audit-website.md` or `mcp:Sanity`. */
+	id: string,
+	kind: SetupKind,
+	name: string,
+	detail: string,
+	/**  Shown before importing, e.g. when an MCP server stores an auth header. */
+	warning: string | null,
+};
+
+export type SetupKind = "instructions" | "skill" | "agent" | "command" | "settings" | "plugin" | "mcpServer";
 
 /**  What Otto suggests for a discovered repo. */
 export type Suggestion = 

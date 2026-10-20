@@ -159,3 +159,17 @@
 .action:hover {
   filter: brightness(1.08);
 }
+
+.link {
+  align-self: flex-start;
+  margin-top: auto;
+  padding: var(--otto-space-1) 0;
+  border: 0;
+  background: transparent;
+  color: var(--otto-accent-text);
+  font-size: var(--otto-type-footnote-size);
+}
+
+.link:hover {
+  text-decoration: underline;
+}

@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import type { DiscoveredRepo, Workspace } from '../bindings';
 import { FriendlyError, queryKeys, registerProject, useDiscoveredProjects } from '../app/queries';
-import styles from './ImportProjects.module.css';
+import styles from '../ui/Sheet.module.css';
 
 interface ImportProjectsProps {
   open: boolean;

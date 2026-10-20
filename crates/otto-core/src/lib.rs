@@ -11,6 +11,7 @@
 
 pub mod agent;
 pub mod app_info;
+pub mod claude_setup;
 pub mod doctor;
 pub mod env;
 pub mod hooks;

@@ -8,6 +8,7 @@ import { DoctorPanel } from '../doctor/DoctorPanel';
 import { CommandPalette, type PaletteAction } from '../palette/CommandPalette';
 import { SessionError, useSessions } from '../sessions/registry';
 import { ImportProjects } from '../projects/ImportProjects';
+import { ClaudeSetup } from '../setup/ClaudeSetup';
 import { NewSessionMenu } from '../sessions/NewSessionMenu';
 import { TerminalView } from '../sessions/TerminalView';
 import { useWorkspaceUi } from '../state/workspace';
@@ -48,6 +49,7 @@ export function App() {
   const doctors = useAllDoctors(list);
   const projects = useProjects(active?.id);
   const [importOpen, setImportOpen] = useState(false);
+  const [setupOpen, setSetupOpen] = useState(false);
   const activeProject = active
     ? (projects.data ?? []).find((p) => p.path === projectByWorkspace[active.id])
     : undefined;
@@ -198,6 +200,15 @@ export function App() {
       keywords: 'add discover scan repos folder',
       run: () => {
         setImportOpen(true);
+      },
+    },
+    {
+      id: 'claude-setup',
+      group: 'Identity',
+      label: 'Bring in Claude setup…',
+      keywords: 'import skills plugins mcp settings claude.md agents commands',
+      run: () => {
+        setSetupOpen(true);
       },
     },
     {
@@ -425,6 +436,7 @@ export function App() {
 
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} actions={paletteActions} />
       <ImportProjects open={importOpen} onOpenChange={setImportOpen} workspaces={list} />
+      <ClaudeSetup open={setupOpen} onOpenChange={setSetupOpen} workspaces={list} />
 
       {inspectorOpen ? (
         <DoctorPanel
@@ -432,6 +444,9 @@ export function App() {
           report={doctor}
           onRerun={() => {
             void doctor.refetch();
+          }}
+          onClaudeSetup={() => {
+            setSetupOpen(true);
           }}
           onSignIn={(agent) => {
             void startSession(active.id, agent, true);

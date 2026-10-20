@@ -29,6 +29,8 @@ pub fn ipc() -> Builder<tauri::Wry> {
         commands::resize_session,
         commands::close_session,
         commands::list_sessions,
+        commands::claude_setup_inventory,
+        commands::import_claude_setup,
     ])
 }
 

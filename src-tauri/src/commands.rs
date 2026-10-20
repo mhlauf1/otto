@@ -6,6 +6,7 @@
 use std::path::PathBuf;
 
 use otto_core::agent::{AgentKind, Purpose};
+use otto_core::claude_setup::{self, ClaudeSource, SetupItem};
 use otto_core::doctor::{self, DoctorReport};
 use otto_core::env::IsolatedEnv;
 use otto_core::projects::{DiscoveredRepo, classify, find_repos};
@@ -316,4 +317,37 @@ pub fn close_session(state: State<'_, AppState>, id: String) -> bool {
 #[specta::specta]
 pub fn list_sessions(state: State<'_, AppState>) -> Vec<SessionInfo> {
     state.sessions.list()
+}
+
+/// What can be copied from Mike's normal `~/.claude` setup into a workspace.
+#[tauri::command]
+#[specta::specta]
+pub fn claude_setup_inventory(state: State<'_, AppState>) -> Result<Vec<SetupItem>, CommandError> {
+    claude_setup::inventory(&ClaudeSource::for_home(&state.host.home))
+        .map_err(|e| CommandError::Invalid(e.to_string()))
+}
+
+/// Copy the chosen setup items into one workspace's Claude config. Copies only.
+#[tauri::command]
+#[specta::specta]
+pub async fn import_claude_setup(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    item_ids: Vec<String>,
+) -> Result<Vec<String>, CommandError> {
+    let ws = state.workspace(&workspace_id).await?;
+    let layout = state.paths.workspace(&ws.id);
+    let source = ClaudeSource::for_home(&state.host.home);
+    let ids = item_ids.clone();
+    let done =
+        tauri::async_runtime::spawn_blocking(move || claude_setup::import(&source, &layout, &ids))
+            .await
+            .map_err(internal)?
+            .map_err(|e| CommandError::Invalid(e.to_string()))?;
+    let detail = serde_json::json!({ "items": done });
+    let _ = state
+        .store
+        .record_event(Some(&ws.id), "claude_setup_imported", &detail)
+        .await;
+    Ok(done)
 }

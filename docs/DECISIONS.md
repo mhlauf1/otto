@@ -140,3 +140,23 @@ Each ADR records the context, the options, the decision and its consequences. Ne
 - **Context:** Tauri's `freezePrototype` freezes `Object.prototype` to stop prototype-pollution attacks. xterm.js 6 assigns to an inherited property while loading, which throws under a frozen prototype ("Attempted to assign to readonly property"), and the window rendered blank. Browser tests missed it because only the Tauri webview freezes prototypes.
 - **Decision:** Turn `freezePrototype` off. Prototype pollution needs attacker-controlled input reaching the webview. Otto loads no remote content, has a strict CSP (`script-src 'self'`) and exposes only typed commands, so the remaining risk is low.
 - **Consequences:** The Playwright smoke test now fails on any page error. Revisit when xterm.js no longer trips the frozen prototype.
+
+## ADR-015 — Projects: auto-discover, confirm, local-only
+
+- **Status:** Accepted (2026-10-20, chosen by Mike)
+- **Decision:**
+  - Otto scans `~/Desktop`, `~/Developer`, `~/Projects`, `~/code`, `~/dev` and `~/src` (depth 5) for git repos. It reads each repo's remotes with **no identity at all** (`env_clear`, `GIT_CONFIG_GLOBAL=/dev/null`) and suggests a workspace from the GitHub owner. Mike confirms once.
+  - Repos with no remote are imported only when Mike picks the workspace. Pushes stay locked until a remote owned by that workspace exists.
+  - Repos with a credential in their config, or a non-GitHub remote, can't be imported.
+  - Sessions open inside a project, and the project is **re-verified on every open**.
+- **Consequences:** The `repos` table allows a NULL `remote_url` (migration 0003). GitLab repos (e.g. `lulafit/signup`) aren't supported in V1.
+
+## ADR-016 — Bringing in the normal Claude setup
+
+- **Status:** Accepted (2026-10-20, chosen by Mike: per-workspace choice)
+- **Context:** Each workspace's `CLAUDE_CONFIG_DIR` starts empty, so none of Mike's skills, plugins, MCP servers or settings exist there.
+- **Decision:**
+  - A picker lists items from `~/.claude` and `~/.claude.json` with a checkbox per workspace. Import **copies** them into the workspace's config dir, rewriting absolute plugin paths.
+  - Never offered: `.credentials.json`, history, sessions, projects, telemetry, `oauthAccount`, or account-synced skills (each workspace's own login syncs those).
+  - MCP servers or settings carrying headers or env get a visible warning, because copying them copies that credential.
+- **Consequences:** Updates to `~/.claude` don't flow into workspaces automatically. Re-import to refresh.

@@ -62,6 +62,14 @@ Newest entries first.
 
 ### Log
 
+#### 2026-10-20 (hardening for daily use)
+
+- **Security:** found GitHub tokens embedded in two repo remotes (port-v1, cadence-private-capital). port-v1 was stripped with Mike's OK; **cadence-private-capital is awaiting Mike**. Both tokens need revoking. Otto now refuses or blocks credential-bearing config and push URLs (G10).
+- Playbook org `lulafit` added (migration 0002 plus defaults; a test keeps them in sync).
+- Projects: auto-discover plus confirm, local-only repos, sessions open in the project (ADR-015).
+- Claude setup import picker (ADR-016).
+- Next: build Otto.app so it doesn't depend on the dev session; then M4 context.
+
 #### 2026-10-20 (M3 revision)
 
 - Mike tried M3 and found two inputs confusing. The composer is now on demand (⌘L) with ↵ to send. "+ New session" is a single menu. SPEC §6.3 updated with Mike's approval.

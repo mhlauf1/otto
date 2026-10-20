@@ -17,13 +17,21 @@ interface DoctorPanelProps {
   onRerun: () => void;
   /** Open the CLI's own sign-in flow inside this workspace. */
   onSignIn: (agent: AgentKind) => void;
+  /** Open the "bring in your Claude setup" sheet. */
+  onClaudeSetup: () => void;
 }
 
 /** Checks that can be fixed by signing in from a terminal session. */
 const SIGN_IN: Partial<Record<string, AgentKind>> = { claude: 'claude', codex: 'codex' };
 
 /** Identity Doctor inspector (SPEC §4.4). Status is always glyph + word + colour, never colour alone. */
-export function DoctorPanel({ workspace, report, onRerun, onSignIn }: DoctorPanelProps) {
+export function DoctorPanel({
+  workspace,
+  report,
+  onRerun,
+  onSignIn,
+  onClaudeSetup,
+}: DoctorPanelProps) {
   const verdict = report.data
     ? report.data.allGreen
       ? 'All clear. Pushes are allowed.'
@@ -102,6 +110,9 @@ export function DoctorPanel({ workspace, report, onRerun, onSignIn }: DoctorPane
           Checking who {workspace.name} is signed in as…
         </p>
       )}
+      <button type="button" className={styles.link} onClick={onClaudeSetup}>
+        Bring in your Claude setup…
+      </button>
     </aside>
   );
 }
