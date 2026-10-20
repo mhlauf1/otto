@@ -1,21 +1,21 @@
 import { create } from 'zustand';
 
-/** Workspaces known at launch. M1 replaces this with the WorkspaceManager's list. */
-export const WORKSPACES = [
-  { id: 'playbook', name: 'Playbook', shortcut: '1', side: 'left' },
-  { id: 'lauf', name: 'Lauf', shortcut: '2', side: 'right' },
-] as const;
-
-export type WorkspaceId = (typeof WORKSPACES)[number]['id'];
-
+/** UI-only state. Workspaces themselves come from the Rust core (`useWorkspaces`). */
 interface WorkspaceUiState {
-  active: WorkspaceId;
-  setActive: (id: WorkspaceId) => void;
+  /** Selected workspace ID, or null to mean "the first one". */
+  activeId: string | null;
+  inspectorOpen: boolean;
+  setActive: (id: string) => void;
+  toggleInspector: () => void;
 }
 
 export const useWorkspaceUi = create<WorkspaceUiState>((set) => ({
-  active: 'playbook',
-  setActive: (active) => {
-    set({ active });
+  activeId: null,
+  inspectorOpen: true,
+  setActive: (activeId) => {
+    set({ activeId });
+  },
+  toggleInspector: () => {
+    set((s) => ({ inspectorOpen: !s.inspectorOpen }));
   },
 }));

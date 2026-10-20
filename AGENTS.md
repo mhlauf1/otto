@@ -33,16 +33,17 @@ Otto is a native macOS app (Tauri 2 + React 19/TypeScript + Rust) that keeps Mik
 
 Requires Node from `.nvmrc` (`nvm use`), pnpm 10 and Rust from `rust-toolchain.toml`.
 
-| Command                       | What it does                                                           |
-| ----------------------------- | ---------------------------------------------------------------------- |
-| `pnpm install`                | Install JS dependencies (exact versions, frozen in CI)                 |
-| `pnpm dev`                    | Run Otto (Vite + Tauri). Regenerates `src/bindings.ts` on launch       |
-| `pnpm dev:web`                | Browser-only preview at http://localhost:1420 (no Rust core)           |
-| `pnpm check`                  | Everything CI runs: lint, typecheck, unit tests, Rust fmt/clippy/tests |
-| `pnpm test` / `pnpm test:e2e` | Vitest / Playwright (WebKit), with screenshots in `test-results/`      |
-| `pnpm tokens`                 | Regenerate `src/design/tokens.css` from `tokens.ts`                    |
-| `pnpm bindings`               | Regenerate `src/bindings.ts` from the Rust commands                    |
-| `pnpm icons`                  | Regenerate app icons from `src/assets/brand/app-icon.svg`              |
-| `pnpm build`                  | Release `.app` and `.dmg`                                              |
+| Command                                    | What it does                                                           |
+| ------------------------------------------ | ---------------------------------------------------------------------- |
+| `pnpm install`                             | Install JS dependencies (exact versions, frozen in CI)                 |
+| `pnpm dev`                                 | Run Otto (Vite + Tauri). Regenerates `src/bindings.ts` on launch       |
+| `pnpm dev:web`                             | Browser-only preview at http://localhost:1420 (no Rust core)           |
+| `pnpm check`                               | Everything CI runs: lint, typecheck, unit tests, Rust fmt/clippy/tests |
+| `cargo test -p otto-core --test isolation` | The SPEC §4.6 isolation suite (a required CI job)                      |
+| `pnpm test` / `pnpm test:e2e`              | Vitest / Playwright (WebKit), with screenshots in `test-results/`      |
+| `pnpm tokens`                              | Regenerate `src/design/tokens.css` from `tokens.ts`                    |
+| `pnpm bindings`                            | Regenerate `src/bindings.ts` from the Rust commands                    |
+| `pnpm icons`                               | Regenerate app icons from `src/assets/brand/app-icon.svg`              |
+| `pnpm build`                               | Release `.app` and `.dmg`                                              |
 
 Generated files are committed and checked by tests: `src/design/tokens.css`, `src/bindings.ts`.

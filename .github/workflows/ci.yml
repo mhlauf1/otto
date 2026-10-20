@@ -60,3 +60,17 @@ jobs:
         with:
           tool: cargo-audit
       - run: cargo audit
+
+  isolation:
+    # SPEC §4.6: the build cannot ship if any of these fail. Mark this check as required
+    # in the repo's branch protection.
+    name: Isolation suite (SPEC §4.6)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install toolchain from rust-toolchain.toml
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: Tool versions (real git and gh are part of the test)
+        run: git --version && gh --version
+      - run: cargo test -p otto-core --test isolation -- --nocapture

@@ -2,7 +2,23 @@
 
 Newest entries first.
 
-## Current milestone: M0 — Foundations
+## Current milestone: M1 — Isolation core ✅ (awaiting Mike's demo)
+
+### Definition of done
+
+- [x] Workspace model with injection-proof validation (`workspace.rs`).
+- [x] `IsolatedEnv`: `env_clear()` plus the ADR-008 allowlist; forbidden keys can't be set.
+- [x] Per-workspace directories (0700), managed gitconfig, hooks, askpass and the Codex file-storage setting (`provision.rs`).
+- [x] `pre-commit`/`pre-push` hooks: fail closed, check configured and effective URLs, check every outgoing commit, gated by the Doctor.
+- [x] Repo registration rules (`repo.rs`) plus SQLite store with migrations and an append-only audit log.
+- [x] Identity Doctor (gh, git, ssh, Claude, Codex, hooks, rc-file secrets), run on launch, on switch, and on demand with ⌘⇧I.
+- [x] Isolation suite: 19 tests, offline, real git and gh, and a dedicated CI job.
+- [x] Real logins set up: Playbook = `mikelauf`, Lauf = `mhlauf1`, each isolated with `--insecure-storage`.
+- [ ] Demo to Mike.
+
+**Known gaps (by design, later milestones):** SSH key generation and onboarding (M6); Claude and Codex sign-in flows (M2); repo picker UI (M3); the Playbook GitHub **org** isn't on the Playbook allowlist yet, so Mike needs to supply its name.
+
+## Previous milestone: M0 — Foundations
 
 ### Definition of done
 
@@ -23,6 +39,13 @@ Newest entries first.
 **Not done on purpose:** there's no placeholder `isolation-suite` CI job. A job that passes with zero tests would claim a guarantee we don't have yet (SPEC §0.3). M1 adds the real suite as a required check.
 
 ### Log
+
+#### 2026-10-20 (M1)
+
+- Built the isolation core in `otto-core`, wired it into Tauri, and added the Identity Doctor inspector.
+- The tests found a real bug: git falls back to SSH_ASKPASS for HTTPS passwords, which could have leaked an SSH passphrase. Fixed (ADR-012).
+- Judgment call: only identity checks gate pushes (ADR-011).
+- Mike's default `~/.config/gh` was briefly switched to mhlauf1 by a mistyped login. Otto doesn't use it, but Mike may want to run `gh auth login` as mikelauf for normal terminals.
 
 #### 2026-10-20
 

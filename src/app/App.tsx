@@ -1,85 +1,179 @@
-import { useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useEffect, useMemo } from 'react';
+import type { DoctorReport, Workspace } from '../bindings';
 import { OttoMark } from '../brand/OttoMark';
 import { OttoWordmark } from '../brand/OttoWordmark';
-import { WORKSPACES, useWorkspaceUi } from '../state/workspace';
+import { DoctorPanel } from '../doctor/DoctorPanel';
+import { useWorkspaceUi } from '../state/workspace';
 import styles from './App.module.css';
-import { FriendlyError, useAppInfo } from './useAppInfo';
+import {
+  FriendlyError,
+  queryKeys,
+  useAllDoctors,
+  useAppInfo,
+  useDoctor,
+  useWorkspaces,
+} from './queries';
+
+/** Which half of the mark a workspace lights: the first two workspaces own a half each. */
+const sideFor = (index: number) => (index === 0 ? 'left' : index === 1 ? 'right' : 'none');
 
 /**
- * M0 hello window: native chrome, tokens in both themes, workspace tint,
- * and one typed round trip to the Rust core.
+ * Main window: workspaces from the core, workspace tint, and the Identity Doctor.
+ * The full shell (sessions, composer, palette) arrives in M2–M3.
  */
 export function App() {
-  const { active, setActive } = useWorkspaceUi();
-  const workspace = WORKSPACES.find((w) => w.id === active) ?? WORKSPACES[0];
+  const workspaces = useWorkspaces();
+  const list = useMemo(() => workspaces.data ?? [], [workspaces.data]);
+  const { activeId, setActive, inspectorOpen, toggleInspector } = useWorkspaceUi();
+  const activeIndex = Math.max(
+    0,
+    list.findIndex((w) => w.id === activeId),
+  );
+  const active = list[activeIndex];
+  const doctors = useAllDoctors(list);
+  const doctor = useDoctor(active?.id);
+  const queryClient = useQueryClient();
 
-  // ⌘1 / ⌘2 switch workspaces (SPEC §6.4).
+  // ⌘1…⌘9 switch workspaces and re-run that workspace's Identity Doctor (SPEC §4.4, §6.4).
+  // ⌘⇧I toggles the Identity Doctor.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!e.metaKey) return;
-      // Match the physical key too, so non-US layouts still get ⌘1/⌘2.
-      const match = WORKSPACES.find((w) => w.shortcut === e.key || `Digit${w.shortcut}` === e.code);
-      if (match) {
+      if (e.shiftKey && e.code === 'KeyI') {
         e.preventDefault();
-        setActive(match.id);
+        toggleInspector();
+        return;
+      }
+      const digit = /^Digit([1-9])$/.exec(e.code)?.[1] ?? (/^[1-9]$/.test(e.key) ? e.key : null);
+      const target = digit ? list[Number(digit) - 1] : undefined;
+      if (target) {
+        e.preventDefault();
+        setActive(target.id);
+        void queryClient.invalidateQueries({ queryKey: queryKeys.doctor(target.id) });
       }
     };
     window.addEventListener('keydown', onKey);
     return () => {
       window.removeEventListener('keydown', onKey);
     };
-  }, [setActive]);
+  }, [list, setActive, toggleInspector, queryClient]);
+
+  if (!active) {
+    return (
+      <div className={styles.loading} data-testid="window">
+        <OttoMark size={40} />
+        {workspaces.isError ? (
+          <p role="alert">
+            {workspaces.error instanceof FriendlyError
+              ? workspaces.error.message
+              : 'Otto couldn’t load your workspaces.'}
+          </p>
+        ) : null}
+      </div>
+    );
+  }
+
+  const switchTo = (w: Workspace) => {
+    setActive(w.id);
+    void queryClient.invalidateQueries({ queryKey: queryKeys.doctor(w.id) });
+  };
 
   return (
-    <div className={styles.window} data-workspace={workspace.id} data-testid="window">
+    <div
+      className={styles.window}
+      data-tint={active.tint}
+      data-workspace={active.id}
+      data-inspector={inspectorOpen ? 'open' : 'closed'}
+      data-testid="window"
+    >
       <aside className={styles.sidebar} aria-label="Sidebar">
         <div className={styles.titlebar} data-tauri-drag-region />
         <div className={styles.brand}>
-          <OttoMark size={18} lit={workspace.side} />
+          <OttoMark size={18} lit={sideFor(activeIndex)} />
           <OttoWordmark height={13} />
         </div>
 
         <nav aria-label="Workspaces">
           <p className={styles.sectionLabel}>Workspaces</p>
           <ul className={styles.workspaceList}>
-            {WORKSPACES.map((w) => (
+            {list.map((w, i) => (
               <li key={w.id}>
                 <button
                   type="button"
                   className={styles.workspaceItem}
-                  data-workspace={w.id}
-                  aria-current={w.id === active ? 'true' : undefined}
+                  data-tint={w.tint}
+                  aria-current={w.id === active.id ? 'true' : undefined}
                   onClick={() => {
-                    setActive(w.id);
+                    switchTo(w);
                   }}
                 >
                   <span className={styles.dot} aria-hidden />
                   <span className={styles.workspaceName}>{w.name}</span>
-                  <kbd className={styles.kbd}>⌘{w.shortcut}</kbd>
+                  <HealthBadge report={doctors[i]?.data} />
+                  <kbd className={styles.kbd}>⌘{i + 1}</kbd>
                 </button>
               </li>
             ))}
           </ul>
         </nav>
 
-        <p className={styles.sidebarFooter}>Milestone 0 · Foundations</p>
+        <p className={styles.sidebarFooter}>Milestone 1 · Isolation core</p>
       </aside>
 
       <main className={styles.main}>
         <div className={styles.titlebar} data-tauri-drag-region>
-          <span className={styles.titlebarWorkspace}>{workspace.name}</span>
+          <span className={styles.titlebarWorkspace}>{active.name}</span>
+          <button
+            type="button"
+            className={styles.titlebarButton}
+            onClick={toggleInspector}
+            aria-pressed={inspectorOpen}
+            title="Identity Doctor (⌘⇧I)"
+          >
+            Identity
+          </button>
         </div>
         <section className={styles.hero}>
-          <OttoMark size={88} lit={workspace.side} label={`Otto — ${workspace.name} workspace`} />
+          <OttoMark
+            size={88}
+            lit={sideFor(activeIndex)}
+            label={`Otto — ${active.name} workspace`}
+          />
           <h1 className={styles.headline}>Every identity, signed in. Nothing crossing over.</h1>
           <p className={styles.subhead}>
-            You’re in <strong className={styles.accentText}>{workspace.name}</strong>. Press ⌘1 or
-            ⌘2 to switch.
+            You’re in <strong className={styles.accentText}>{active.name}</strong> as{' '}
+            {active.identity.githubUser}. Press ⌘1 or ⌘2 to switch.
           </p>
           <CoreStatus />
         </section>
       </main>
+
+      {inspectorOpen ? (
+        <DoctorPanel
+          workspace={active}
+          report={doctor}
+          onRerun={() => {
+            void doctor.refetch();
+          }}
+        />
+      ) : null}
     </div>
+  );
+}
+
+/** Tiny ✓ / ✕ next to each workspace, so a red identity is visible from anywhere. */
+function HealthBadge({ report }: { report: DoctorReport | undefined }) {
+  if (!report) return null;
+  return (
+    <span
+      className={styles.health}
+      data-state={report.pushAllowed ? 'ok' : 'blocked'}
+      role="img"
+      aria-label={report.pushAllowed ? 'Identity verified' : 'Identity problem: pushes blocked'}
+    >
+      {report.pushAllowed ? '✓' : '✕'}
+    </span>
   );
 }
 

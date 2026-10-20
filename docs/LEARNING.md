@@ -62,3 +62,32 @@ Vibrancy is macOS's frosted-glass material, the blurred desktop showing through 
 
 - Tauri 2 "What is Tauri?" and "Process model" pages (tauri.app/start, tauri.app/concept/process-model).
 - _The Rust Book_, chapters 1–4 (ownership is the big one).
+
+---
+
+## Chapter 1 — The isolation core (M1)
+
+### What "isolation" actually means here
+
+Every CLI (git, gh, claude, codex) decides who you are by reading **environment variables** and **config files**. Otto controls both. When it starts a process, it first wipes the environment (`env_clear()`), then adds back only an allowlist. `CLAUDE_CONFIG_DIR`, for example, points at that workspace's own folder. A Playbook process literally has no path to anything in Lauf's folder.
+
+### The guarantee vs. the guardrail
+
+- **Guarantee:** each workspace holds _only its own_ GitHub token. Even if an agent bypassed every check, git could only show GitHub the Playbook token from a Playbook process. A test proves this by asking git what it _would_ send.
+- **Guardrail:** git **hooks** are shell scripts git runs at certain moments. `pre-commit` checks the author email, and `pre-push` checks where the push is going and who wrote every commit. They catch honest mistakes early, but `--no-verify` can skip them, which is why they aren't the guarantee.
+
+### Testing without the internet
+
+"GitHub" in tests is a **bare repo**: a folder git can push to, with no working files. A git setting called `insteadOf` rewrites `https://github.com/mikelauf/project.git` to that folder, so the hooks see a real GitHub URL while the bytes land on disk. One test accidentally reached the real GitHub, and that's how we found that git talks to the remote _before_ `pre-push` runs.
+
+### Rust concepts you've now met
+
+- **Integration tests** live in `crates/otto-core/tests/`. Each file is compiled as if it were an outside user of the library, so it can only use the public API.
+- **`async` vs blocking:** SQLite calls are `async`, so they wait without freezing anything. Identity Doctor runs slow external commands, so Tauri runs it on a separate worker thread (`spawn_blocking`) and the window stays responsive.
+- **Migrations** (`migrations/0001_init.sql`) are numbered SQL files that sqlx applies once, in order, on startup. It's how the database schema evolves without losing data.
+- **`#[serde(tag = "kind", content = "message")]`** turns a Rust error enum into `{ kind: "refused", message: "…" }` in TypeScript, so the UI can show friendly text and still branch on `kind`.
+
+### What to read next
+
+- _Pro Git_, chapter 8.3 "Git Hooks" (git-scm.com/book)
+- _The Rust Book_, chapter 11 "Writing Automated Tests"

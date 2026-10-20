@@ -103,3 +103,20 @@ Each ADR records the context, the options, the decision and its consequences. Ne
   - The web layer paints a translucent sidebar token over the vibrancy and a solid content surface.
   - Transparent windows on macOS need `macOSPrivateApi: true`.
 - **Consequences:** Otto can't ship on the Mac App Store (it's distributed as a notarized `.dmg`, per SPEC §5.1). Vibrancy appears only inside the shell; browser previews fall back to the solid `window` colour.
+
+## ADR-011 — Only identity checks gate pushes
+
+- **Status:** Accepted (2026-10-20). This is a judgment call during M1; Mike can overrule it.
+- **Context:** SPEC §4.4 says "anything red blocks pushes". On first real run, both workspaces were blocked because Codex wasn't installed and Claude wasn't signed in yet. Neither affects _who_ a push goes out as.
+- **Decision:** Identity Doctor reports two verdicts. `allGreen` means nothing is red. `pushAllowed` means the identity checks pass: hooks, git author, GitHub login and SSH (`PUSH_GATING` in `doctor.rs`). Only `pushAllowed` is written to the `doctor-status` file that `pre-push` reads. Agent login problems still show red in the UI.
+- **Consequences:** A red agent login doesn't block git work. The sidebar ✓/✕ reflects push safety.
+
+## ADR-012 — Git may never prompt for HTTPS credentials
+
+- **Status:** Accepted (2026-10-20)
+- **Context:** An isolation test showed that when a workspace has no GitHub login, git falls back to `SSH_ASKPASS` to ask for an **HTTPS password**. With Otto's askpass helper installed, that could have handed the workspace's SSH key passphrase to a remote server as a password.
+- **Decision:**
+  - `GIT_ASKPASS=/usr/bin/false`, so HTTPS credentials come only from the gh credential helper, or the operation fails.
+  - The askpass helper answers only ssh's exact passphrase prompt for that workspace's key.
+  - Both are covered by isolation tests.
+- **Also learned:** git contacts the remote **before** `pre-push` runs, so authentication with the workspace's own credential happens first. The hook test for URL-rewrite attacks therefore calls the hook directly, the same way git does, rather than relying on the network.

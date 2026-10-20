@@ -68,6 +68,7 @@
   --otto-easing-enter: cubic-bezier(0, 0, 0, 1);
   --otto-easing-exit: cubic-bezier(0.3, 0, 1, 1);
   --otto-sidebar-width: 248px;
+  --otto-inspector-width: 320px;
   --otto-titlebar-height: 52px;
   color-scheme: light dark;
   --otto-color-window: #F5F5F7;
@@ -96,12 +97,12 @@
   --otto-accent-soft: rgba(17, 17, 20, 0.08);
   --otto-accent-text: #111114;
 }
-[data-workspace='playbook'] {
+[data-tint='cobalt'] {
   --otto-accent: #4062F0;
   --otto-accent-soft: rgba(64, 98, 240, 0.1);
   --otto-accent-text: #2F4FD6;
 }
-[data-workspace='lauf'] {
+[data-tint='jade'] {
   --otto-accent: #13875F;
   --otto-accent-soft: rgba(19, 135, 95, 0.1);
   --otto-accent-text: #0E7350;
@@ -135,12 +136,12 @@
     --otto-accent-soft: rgba(242, 242, 244, 0.1);
     --otto-accent-text: #F2F2F4;
   }
-  [data-workspace='playbook'] {
+  [data-tint='cobalt'] {
     --otto-accent: #6C86FF;
     --otto-accent-soft: rgba(108, 134, 255, 0.16);
     --otto-accent-text: #9AADFF;
   }
-  [data-workspace='lauf'] {
+  [data-tint='jade'] {
     --otto-accent: #34C08F;
     --otto-accent-soft: rgba(52, 192, 143, 0.16);
     --otto-accent-text: #6FD9B2;

@@ -1,6 +1,7 @@
 //! The Tauri shell: window, IPC wiring and logging. Logic lives in `otto-core`.
 
 mod commands;
+mod state;
 
 use std::path::{Path, PathBuf};
 
@@ -15,7 +16,12 @@ pub fn bindings_path() -> PathBuf {
 /// The single list of IPC commands. Adding a command here exposes it to the UI
 /// and to the generated bindings at the same time.
 pub fn ipc() -> Builder<tauri::Wry> {
-    Builder::<tauri::Wry>::new().commands(collect_commands![commands::app_info])
+    Builder::<tauri::Wry>::new().commands(collect_commands![
+        commands::app_info,
+        commands::list_workspaces,
+        commands::run_identity_doctor,
+        commands::register_repo,
+    ])
 }
 
 /// Write `src/bindings.ts`.
@@ -50,7 +56,10 @@ pub fn run() {
         .invoke_handler(ipc.invoke_handler())
         .setup(move |app| {
             ipc.mount_events(app);
-            tracing::info!("Otto started");
+            // Provision workspaces before the window can issue any command.
+            let state = tauri::async_runtime::block_on(state::AppState::start())?;
+            tracing::info!(root = %state.paths.root().display(), "Otto started");
+            tauri::Manager::manage(app, state);
             Ok(())
         })
         .run(tauri::generate_context!());

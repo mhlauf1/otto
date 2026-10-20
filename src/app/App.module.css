@@ -1,7 +1,20 @@
 .window {
   display: grid;
-  grid-template-columns: var(--otto-sidebar-width) 1fr;
+  grid-template-columns: var(--otto-sidebar-width) minmax(0, 1fr);
   height: 100%;
+}
+
+.window[data-inspector='open'] {
+  grid-template-columns: var(--otto-sidebar-width) minmax(0, 1fr) var(--otto-inspector-width);
+}
+
+.loading {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: var(--otto-space-4);
+  height: 100%;
+  color: var(--otto-color-text-tertiary);
 }
 
 /* ── Sidebar: translucent, so native vibrancy shows through ─────────── */
@@ -16,6 +29,7 @@
 }
 
 .titlebar {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -109,6 +123,33 @@
   flex-direction: column;
   min-width: 0;
   background: var(--otto-color-surface);
+}
+
+.titlebarButton {
+  position: absolute;
+  right: var(--otto-space-3);
+  padding: var(--otto-space-1) var(--otto-space-2);
+  border: 0;
+  border-radius: var(--otto-radius-sm);
+  background: transparent;
+  color: var(--otto-color-text-secondary);
+  font-size: var(--otto-type-footnote-size);
+}
+
+.titlebarButton:hover,
+.titlebarButton[aria-pressed='true'] {
+  background: var(--otto-color-fill-hover);
+  color: var(--otto-color-text-primary);
+}
+
+.health {
+  font-size: var(--otto-type-caption-size);
+  font-weight: var(--otto-type-headline-weight);
+  color: var(--otto-color-success);
+}
+
+.health[data-state='blocked'] {
+  color: var(--otto-color-danger);
 }
 
 .titlebarWorkspace {

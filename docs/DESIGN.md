@@ -91,3 +91,7 @@ Source: `src/design/tokens.ts` → `pnpm tokens` → `src/design/tokens.css`. A 
 Native overlay title bar with traffic lights at (18, 22), a translucent sidebar over native `sidebar` vibrancy, and a solid content surface. The sidebar holds the lockup, a Workspaces section (dot, name, ⌘ shortcut) and a milestone footer. The centre holds the large mark lit for the active workspace, the tagline, and a pill showing the round trip to the Rust core (`Otto 0.1.0 · macos · aarch64`).
 
 Screenshots: `pnpm test:e2e` writes `test-results/hello-{light,dark,lauf}.png`. CI uploads them as an artifact.
+
+### M1 — Identity Doctor inspector
+
+This is a functional panel on the right (320px), toggled with ⌘⇧I or the title-bar "Identity" button. Each check shows a **glyph, a word (for VoiceOver) and a colour**, never colour alone, which resolves the jade-vs-success concern above. The sidebar shows ✓/✕ per workspace for push safety. It follows the Linear and LangChain references above; the full visual pass happens in M3.

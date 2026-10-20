@@ -127,20 +127,20 @@ export interface Accent {
 }
 
 export const workspaceAccent: Record<
-  'neutral' | 'playbook' | 'lauf',
+  'neutral' | 'cobalt' | 'jade',
   { light: Accent; dark: Accent }
 > = {
   neutral: {
     light: { accent: '#111114', accentSoft: 'rgba(17, 17, 20, 0.08)', accentText: '#111114' },
     dark: { accent: '#F2F2F4', accentSoft: 'rgba(242, 242, 244, 0.1)', accentText: '#F2F2F4' },
   },
-  /** Cobalt. */
-  playbook: {
+  /** Playbook. */
+  cobalt: {
     light: { accent: '#4062F0', accentSoft: 'rgba(64, 98, 240, 0.1)', accentText: '#2F4FD6' },
     dark: { accent: '#6C86FF', accentSoft: 'rgba(108, 134, 255, 0.16)', accentText: '#9AADFF' },
   },
-  /** Jade. */
-  lauf: {
+  /** Lauf. */
+  jade: {
     light: { accent: '#13875F', accentSoft: 'rgba(19, 135, 95, 0.1)', accentText: '#0E7350' },
     dark: { accent: '#34C08F', accentSoft: 'rgba(52, 192, 143, 0.16)', accentText: '#6FD9B2' },
   },
@@ -170,5 +170,6 @@ export const motion = {
 
 export const layout = {
   sidebarWidth: 248,
+  inspectorWidth: 320,
   titlebarHeight: 52,
 } as const;

@@ -54,7 +54,7 @@ export function renderTokensCss(): string {
 
   const accents = (theme: 'light' | 'dark', indent = ''): string[] =>
     Object.entries(workspaceAccent).map(([ws, a]) => {
-      const selector = ws === 'neutral' ? ':root' : `[data-workspace='${ws}']`;
+      const selector = ws === 'neutral' ? ':root' : `[data-tint='${ws}']`;
       return block(selector, accentDecls(a[theme]), indent);
     });
 

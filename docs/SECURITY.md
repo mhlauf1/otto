@@ -15,13 +15,19 @@
 
 ## Isolation guarantees (SPEC §4)
 
-| #   | Guarantee                                             | Mechanism                                                               | Test                  |
-| --- | ----------------------------------------------------- | ----------------------------------------------------------------------- | --------------------- |
-| G1  | Spawned processes never inherit the login environment | `env_clear()` plus an allowlist in `otto-core`                          | isolation test 3 (M1) |
-| G2  | Each CLI keeps its login in its workspace directory   | `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `GH_CONFIG_DIR` (see open questions) | isolation test 4 (M1) |
-| G3  | Git identity comes only from the workspace            | `GIT_CONFIG_GLOBAL`, `GIT_CONFIG_NOSYSTEM=1`                            | isolation test 2 (M1) |
-| G4  | Pushes only reach allowlisted owners                  | managed `pre-push` hook plus a remote check when a repo opens           | isolation test 1 (M1) |
-| G5  | Context layers never cross workspaces                 | ContextService                                                          | M4 separation tests   |
+All guarantees are tested in `crates/otto-core/tests/isolation.rs`, which runs as its own required CI job. It uses real git and gh, local bare repos stand in for GitHub, and no test touches the network.
+
+| #   | Guarantee                                              | Mechanism                                                                          | Tests                                                                                                      |
+| --- | ------------------------------------------------------ | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| G1  | Spawned processes never inherit the login environment  | `IsolatedEnv`: `env_clear()` plus an allowlist; `set` refuses forbidden keys       | `t3_spawned_processes_contain_no_stripped_variables` (env, sh, zsh, with a polluted parent)                |
+| G2  | Each workspace presents only its own GitHub credential | gh `--insecure-storage` in `<ws>/gh`; credential helper in the workspace gitconfig | `t4_each_workspace_only_ever_presents_its_own_github_credential` (concurrent, real gh)                     |
+| G3  | Git identity and config come only from the workspace   | `GIT_CONFIG_GLOBAL`, `GIT_CONFIG_NOSYSTEM`, `GIT_AUTHOR_*`/`GIT_COMMITTER_*`       | `t2_repo_local_email_cannot_override…`, `t4_concurrent_workspaces_only_read_their_own_git_config`          |
+| G4  | Pushes reach only allowlisted owners                   | `pre-push` checks both the configured and the effective URL                        | `t1_playbook_cannot_push_to_a_lauf_owned_remote`, `t1_an_insteadof_rewrite…`, `t1_control…`                |
+| G5  | Foreign-authored commits never leave                   | `pre-commit`, plus a `pre-push` per-commit check (survives `commit --no-verify`)   | `t2_commit_with_a_foreign_author_is_blocked`, `t2_a_foreign_commit_made_with_no_verify…`                   |
+| G6  | Hooks fail closed                                      | `OTTO_WORKSPACE` must match; a red Doctor blocks pushes                            | `t1_hooks_fail_closed…`, `t1_pushes_are_blocked_while_the_identity_doctor_is_red`                          |
+| G7  | The SSH passphrase never reaches anything but ssh      | `GIT_ASKPASS=/usr/bin/false`; askpass checks the prompt                            | `t1_git_never_offers_the_ssh_passphrase…`, `askpass_answers_only_its_own_key_prompt`                       |
+| G8  | A repo belongs to exactly one workspace                | `verify_repo` plus a UNIQUE path in SQLite                                         | `repos_only_open_in…`, `repos_that_override_guardrails…`, `store::a_repo_belongs_to_exactly_one_workspace` |
+| G9  | Context layers never cross workspaces                  | ContextService                                                                     | M4                                                                                                         |
 
 ## Research findings (2026-10-20) → ADR-005 to ADR-008
 

@@ -7,6 +7,14 @@ import { invoke as __TAURI_INVOKE } from "@tauri-apps/api/core";
 /** Commands */
 export const commands = {
 	appInfo: () => typedError<AppInfo, AppInfoError>(__TAURI_INVOKE("app_info")),
+	listWorkspaces: () => typedError<Workspace[], CommandError>(__TAURI_INVOKE("list_workspaces")),
+	/**
+	 *  Run the Identity Doctor for one workspace, record the verdict for `pre-push`,
+	 *  and log it to the audit trail.
+	 */
+	runIdentityDoctor: (workspaceId: string) => typedError<DoctorReport, CommandError>(__TAURI_INVOKE("run_identity_doctor", { workspaceId })),
+	/**  Check and register a repo for a workspace (SPEC §4.2). */
+	registerRepo: (workspaceId: string, path: string) => typedError<VerifiedRepo, CommandError>(__TAURI_INVOKE("register_repo", { workspaceId, path })),
 };
 
 /* Types */
@@ -21,6 +29,67 @@ export type AppInfo = {
 export type AppInfoError = 
 /**  The OS isn't one Otto supports. V1 is macOS only (SPEC §5.1). */
 { kind: "unsupportedOs"; message: string };
+
+export type Check = {
+	id: string,
+	label: string,
+	status: CheckStatus,
+	/**  What we found, in plain language. */
+	detail: string,
+	/**  How to fix it, when it isn't green. */
+	fix: string | null,
+};
+
+export type CheckStatus = "pass" | 
+/**  Works, but something deserves attention. Doesn't block pushes. */
+"warn" | 
+/**  Not used by this workspace (e.g. no SSH key because it pushes over HTTPS). */
+"skipped" | "fail";
+
+/**  Errors any command can return, in words Mike can read. */
+export type CommandError = { kind: "invalid"; message: string } | { kind: "notFound"; message: string } | 
+/**  A repo failed an isolation check. The message says which and why. */
+{ kind: "refused"; message: string } | { kind: "internal"; message: string };
+
+export type DoctorReport = {
+	workspaceId: string,
+	checks: Check[],
+	/**  True when nothing failed. */
+	allGreen: boolean,
+	/**  True when every *identity* check passed (ADR-011). Pushes are blocked otherwise. */
+	pushAllowed: boolean,
+};
+
+/**  A GitHub user or organisation login, compared case-insensitively. */
+export type GithubOwner = string;
+
+/**  The git and GitHub identity a workspace commits and pushes as. */
+export type Identity = {
+	gitName: string,
+	gitEmail: string,
+	githubUser: GithubOwner,
+};
+
+/**  The single restrained accent each workspace gets (SPEC §6.1). Maps to `workspaceAccent` tokens. */
+export type Tint = "cobalt" | "jade";
+
+/**  A repo that passed every check, ready to register. */
+export type VerifiedRepo = {
+	path: string,
+	remoteUrl: string,
+};
+
+export type Workspace = {
+	id: WorkspaceId,
+	name: string,
+	tint: Tint,
+	identity: Identity,
+	/**  GitHub users and orgs this workspace may push to (SPEC §4.2). */
+	ownerAllowlist: GithubOwner[],
+};
+
+/**  A short, path- and shell-safe identifier such as `playbook` or `lauf`. */
+export type WorkspaceId = string;
 
 /* Tauri Specta runtime */
 async function typedError<T, E>(result: Promise<T>): Promise<{ status: "ok"; data: T } | { status: "error"; error: E }> {
