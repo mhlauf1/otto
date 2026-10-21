@@ -17,6 +17,8 @@ pub enum AgentKind {
 pub enum Purpose {
     /// A working session. For Claude, Otto picks the session ID up front so it can resume later (M5).
     Work { claude_session_id: Option<String> },
+    /// Continue an earlier Claude conversation, keeping its ID (Claude only forks when asked).
+    Resume { claude_session_id: String },
     /// Run the CLI's own sign-in flow inside this workspace.
     SignIn,
 }
@@ -51,8 +53,11 @@ impl AgentKind {
                     claude_session_id: None,
                 },
             ) => ("claude", vec![]),
+            (Self::Claude, Purpose::Resume { claude_session_id }) => {
+                ("claude", vec!["--resume".into(), claude_session_id.clone()])
+            }
             (Self::Codex, Purpose::SignIn) => ("codex", vec!["login".into()]),
-            (Self::Codex, Purpose::Work { .. }) => ("codex", vec![]),
+            (Self::Codex, Purpose::Work { .. } | Purpose::Resume { .. }) => ("codex", vec![]),
             // Interactive login shell: reads $ZDOTDIR, which is inside the workspace.
             (Self::Shell, _) => ("/bin/zsh", vec!["-l".into()]),
         };
@@ -73,6 +78,14 @@ mod tests {
             claude_session_id: Some("abc".into()),
         });
         assert_eq!(spec.args, ["--session-id", "abc"]);
+    }
+
+    #[test]
+    fn resuming_continues_the_same_claude_conversation() {
+        let spec = AgentKind::Claude.launch(&Purpose::Resume {
+            claude_session_id: "abc".into(),
+        });
+        assert_eq!(spec.args, ["--resume", "abc"]);
     }
 
     #[test]

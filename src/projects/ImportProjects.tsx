@@ -3,13 +3,21 @@ import { useQueryClient } from '@tanstack/react-query';
 import { open as pickFolder } from '@tauri-apps/plugin-dialog';
 import { useMemo, useState } from 'react';
 import { commands, type DiscoveredRepo, type Workspace } from '../bindings';
-import { FriendlyError, queryKeys, registerProject, useDiscoveredProjects } from '../app/queries';
+import {
+  FriendlyError,
+  groupActions,
+  queryKeys,
+  registerProject,
+  useDiscoveredProjects,
+} from '../app/queries';
 import styles from '../ui/Sheet.module.css';
 
 interface ImportProjectsProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   workspaces: Workspace[];
+  /** Import straight into this group. Only projects of the group's workspace go into it. */
+  target?: { workspaceId: string; groupId: string; groupName: string } | undefined;
 }
 
 const isImportable = (r: DiscoveredRepo) =>
@@ -22,7 +30,7 @@ const tidyPath = (path: string) => path.replace(/^\/Users\/[^/]+/, '~');
  * Matched repos already know their workspace from the GitHub owner; repos with no
  * remote need one picked. "Choose folder…" adds a repo outside the scanned places.
  */
-export function ImportProjects({ open, onOpenChange, workspaces }: ImportProjectsProps) {
+export function ImportProjects({ open, onOpenChange, workspaces, target }: ImportProjectsProps) {
   const discovered = useDiscoveredProjects(open);
   const queryClient = useQueryClient();
   /** Ticked repos → chosen workspace ('' until picked, for repos with no remote). */
@@ -88,6 +96,9 @@ export function ImportProjects({ open, onOpenChange, workspaces }: ImportProject
       const repo = all.find((r) => r.path === path);
       try {
         await registerProject(ws, path, repo?.suggestion.kind === 'needsChoice');
+        if (target?.workspaceId === ws) {
+          await groupActions.moveProject(ws, path, target.groupId);
+        }
       } catch (e) {
         failed[path] = e instanceof FriendlyError ? e.message : 'Couldn’t import.';
       }
@@ -100,6 +111,7 @@ export function ImportProjects({ open, onOpenChange, workspaces }: ImportProject
       ...workspaces.map((w) =>
         queryClient.invalidateQueries({ queryKey: queryKeys.projects(w.id) }),
       ),
+      ...workspaces.map((w) => queryClient.invalidateQueries({ queryKey: queryKeys.past(w.id) })),
     ]);
     if (Object.keys(failed).length === 0) onOpenChange(false);
   };
@@ -158,10 +170,15 @@ export function ImportProjects({ open, onOpenChange, workspaces }: ImportProject
         <Dialog.Overlay className={styles.overlay} />
         <Dialog.Content className={styles.sheet}>
           <header className={styles.header}>
-            <Dialog.Title className={styles.title}>Import projects</Dialog.Title>
+            <Dialog.Title className={styles.title}>
+              {target ? `Import projects into ${target.groupName}` : 'Import projects'}
+            </Dialog.Title>
             <Dialog.Description className={styles.description}>
               Tick the projects you want. Otto remembers where each folder is and puts it in the
-              workspace that owns it on GitHub.
+              workspace that owns it on GitHub
+              {target
+                ? `. ${wsName(target.workspaceId)} projects go straight into ${target.groupName}.`
+                : '.'}
             </Dialog.Description>
             <div className={styles.toolbar}>
               <input

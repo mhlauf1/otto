@@ -9,20 +9,27 @@ const ITEMS: { agent: AgentKind; label: string; detail: string; shortcut?: strin
 ];
 
 interface NewSessionMenuProps {
-  workspaceName: string;
+  /** Where the session opens, e.g. "Lauf · stoc" or "Lauf · General". */
+  target: string;
   onPick: (agent: AgentKind) => void;
+  /** `row` is the full-width "+ New session"; `icon` is the "+" on a project row. */
+  variant?: 'row' | 'icon';
 }
 
 /** One "+ New" entry point; Claude first, Shell available but secondary. */
-export function NewSessionMenu({ workspaceName, onPick }: NewSessionMenuProps) {
+export function NewSessionMenu({ target, onPick, variant = 'row' }: NewSessionMenuProps) {
   return (
     <Menu.Root>
-      <Menu.Trigger className={styles.trigger} aria-label={`New session in ${workspaceName}`}>
-        + New session
+      <Menu.Trigger
+        className={variant === 'icon' ? styles.iconTrigger : styles.trigger}
+        aria-label={`New session in ${target}`}
+        title={variant === 'icon' ? `New session in ${target}` : undefined}
+      >
+        {variant === 'icon' ? '+' : '+ New session'}
       </Menu.Trigger>
       <Menu.Portal>
         <Menu.Content className={styles.menu} side="bottom" align="start" sideOffset={6}>
-          <Menu.Label className={styles.label}>New in {workspaceName}</Menu.Label>
+          <Menu.Label className={styles.label}>New in {target}</Menu.Label>
           {ITEMS.map((item) => (
             <Menu.Item
               key={item.agent}

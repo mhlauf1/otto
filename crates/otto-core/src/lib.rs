@@ -7,6 +7,7 @@
 //!   open, and finding repos on disk
 //! - [`doctor`]: the Identity Doctor
 //! - [`agent`] and [`pty`]: agent sessions in real terminals
+//! - [`history`]: past Claude conversations, for resuming
 //! - [`store`]: SQLite app state
 
 pub mod agent;
@@ -14,6 +15,7 @@ pub mod app_info;
 pub mod claude_setup;
 pub mod doctor;
 pub mod env;
+pub mod history;
 pub mod hooks;
 pub mod projects;
 pub mod provision;

@@ -9,11 +9,12 @@ use otto_core::agent::{AgentKind, Purpose};
 use otto_core::claude_setup::{self, ClaudeSource, SetupItem};
 use otto_core::doctor::{self, DoctorReport};
 use otto_core::env::IsolatedEnv;
+use otto_core::history::{self, PastConversation};
 use otto_core::projects::{DiscoveredRepo, classify, find_repos};
 use otto_core::provision::write_doctor_status;
 use otto_core::pty::{PtyEvent, PtySession};
 use otto_core::repo::{RemotePolicy, RepoRefusal, VerifiedRepo, verify_repo};
-use otto_core::store::Project;
+use otto_core::store::{Project, ProjectGroup, StoreError};
 use otto_core::workspace::Workspace;
 use otto_core::{AppInfo, AppInfoError};
 use serde::Serialize;
@@ -116,6 +117,14 @@ fn internal(e: impl std::fmt::Display) -> CommandError {
     CommandError::Internal(e.to_string())
 }
 
+/// Store refusals are Mike's to read; anything else is an internal failure.
+fn store_error(e: StoreError) -> CommandError {
+    match e {
+        StoreError::Rejected(message) => CommandError::Refused(message),
+        other => internal(other),
+    }
+}
+
 /// Find git repos under `roots` (default: Desktop, Developer, Projects, code, dev, src)
 /// and suggest a workspace for each from its GitHub owner.
 #[tauri::command]
@@ -183,6 +192,116 @@ pub async fn list_projects(
     state.store.projects(&ws.id).await.map_err(internal)
 }
 
+#[tauri::command]
+#[specta::specta]
+pub async fn list_project_groups(
+    state: State<'_, AppState>,
+    workspace_id: String,
+) -> Result<Vec<ProjectGroup>, CommandError> {
+    let ws = state.workspace(&workspace_id).await?;
+    state
+        .store
+        .project_groups(&ws.id)
+        .await
+        .map_err(store_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn create_project_group(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    name: String,
+) -> Result<ProjectGroup, CommandError> {
+    let ws = state.workspace(&workspace_id).await?;
+    state
+        .store
+        .create_project_group(&ws.id, &name)
+        .await
+        .map_err(store_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn rename_project_group(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    group_id: String,
+    name: String,
+) -> Result<(), CommandError> {
+    let ws = state.workspace(&workspace_id).await?;
+    state
+        .store
+        .rename_project_group(&ws.id, &group_id, &name)
+        .await
+        .map_err(store_error)
+}
+
+/// Delete a group; its projects stay in the workspace, ungrouped.
+#[tauri::command]
+#[specta::specta]
+pub async fn delete_project_group(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    group_id: String,
+) -> Result<(), CommandError> {
+    let ws = state.workspace(&workspace_id).await?;
+    state
+        .store
+        .delete_project_group(&ws.id, &group_id)
+        .await
+        .map_err(store_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn reorder_project_groups(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    group_ids: Vec<String>,
+) -> Result<(), CommandError> {
+    let ws = state.workspace(&workspace_id).await?;
+    state
+        .store
+        .reorder_project_groups(&ws.id, &group_ids)
+        .await
+        .map_err(store_error)
+}
+
+/// Name a project (empty goes back to the folder name). Only Otto's label changes.
+#[tauri::command]
+#[specta::specta]
+pub async fn rename_project(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    path: String,
+    name: String,
+) -> Result<(), CommandError> {
+    let ws = state.workspace(&workspace_id).await?;
+    state
+        .store
+        .rename_project(&ws.id, &path, &name)
+        .await
+        .map_err(store_error)
+}
+
+/// Put a project in one of its workspace's groups (`None` for no group).
+#[tauri::command]
+#[specta::specta]
+pub async fn move_project(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    path: String,
+    group_id: Option<String>,
+) -> Result<(), CommandError> {
+    let ws = state.workspace(&workspace_id).await?;
+    state
+        .store
+        .move_project(&ws.id, &path, group_id.as_deref())
+        .await
+        .map_err(store_error)
+}
+
 /// Register a repo to a workspace (SPEC §4.2). `local_only` means Mike chose the
 /// workspace for a repo with no remote; pushes stay locked until a matching remote exists.
 #[tauri::command]
@@ -216,9 +335,48 @@ pub async fn register_repo(
     Ok(repo)
 }
 
+/// The folder a session runs in: a project registered to `ws`, or the home folder.
+async fn session_cwd(
+    state: &AppState,
+    ws: &Workspace,
+    project_path: Option<&str>,
+) -> Result<Option<PathBuf>, CommandError> {
+    let Some(path) = project_path else {
+        return Ok(None);
+    };
+    let owner = state.store.repo_owner(path).await.map_err(internal)?;
+    if owner.as_deref() != Some(ws.id.as_str()) {
+        return Err(CommandError::Refused(format!(
+            "{path} isn't a {} project. Import it into {} first.",
+            ws.name, ws.name
+        )));
+    }
+    Ok(Some(PathBuf::from(path)))
+}
+
+/// Earlier Claude conversations in a project (or General), newest first. Read only from
+/// this workspace's own Claude config, so another workspace's history can't appear.
+#[tauri::command]
+#[specta::specta]
+pub async fn list_past_conversations(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    project_path: Option<String>,
+) -> Result<Vec<PastConversation>, CommandError> {
+    let ws = state.workspace(&workspace_id).await?;
+    let cwd = session_cwd(&state, &ws, project_path.as_deref())
+        .await?
+        .unwrap_or_else(|| state.host.home.clone());
+    let claude_dir = state.paths.workspace(&ws.id).claude_dir();
+    tauri::async_runtime::spawn_blocking(move || history::list(&claude_dir, &cwd, 10))
+        .await
+        .map_err(internal)
+}
+
 /// Open an agent (or shell) in a real terminal inside the workspace's isolated
 /// environment, optionally inside one of its projects. Output streams to `on_event`.
-/// With `sign_in`, runs the CLI's own login flow.
+/// With `sign_in`, runs the CLI's own login flow. With `resume_id`, continues an earlier
+/// Claude conversation from this workspace and folder.
 #[tauri::command]
 #[specta::specta]
 #[allow(clippy::too_many_arguments)]
@@ -228,6 +386,7 @@ pub async fn open_session(
     agent: AgentKind,
     sign_in: bool,
     project_path: Option<String>,
+    resume_id: Option<String>,
     cols: u16,
     rows: u16,
     on_event: Channel<PtyEvent>,
@@ -237,48 +396,68 @@ pub async fn open_session(
 
     // A project must be registered to *this* workspace, and is re-verified every time:
     // a token or foreign remote added since registration is caught here (ADR-007).
-    let (cwd, project) = match project_path {
+    let (cwd, in_project) = match session_cwd(&state, &ws, project_path.as_deref()).await? {
         Some(path) => {
-            let owner = state.store.repo_owner(&path).await.map_err(internal)?;
-            if owner.as_deref() != Some(ws.id.as_str()) {
-                return Err(CommandError::Refused(format!(
-                    "{path} isn't a {} project. Import it into {} first.",
-                    ws.name, ws.name
-                )));
-            }
-            let repo = verify(
-                &state,
-                &ws,
-                PathBuf::from(&path),
-                RemotePolicy::AllowLocalOnly,
-            )
-            .await?;
-            let name = PathBuf::from(&repo.path)
-                .file_name()
-                .map(|n| n.to_string_lossy().into_owned());
-            (PathBuf::from(repo.path), name)
+            let repo = verify(&state, &ws, path, RemotePolicy::AllowLocalOnly).await?;
+            (PathBuf::from(repo.path), true)
         }
-        None => (state.host.home.clone(), None),
+        None => (state.host.home.clone(), false),
+    };
+
+    // A resumed conversation must be one of *this* workspace's, started in *this* folder.
+    let resumed = match resume_id {
+        Some(id) if agent == AgentKind::Claude && !sign_in => {
+            let claude_dir = layout.claude_dir();
+            let dir = cwd.clone();
+            let past = tauri::async_runtime::spawn_blocking(move || {
+                history::list(&claude_dir, &dir, usize::MAX)
+            })
+            .await
+            .map_err(internal)?;
+            let found = past.into_iter().find(|c| c.id == id).ok_or_else(|| {
+                CommandError::Refused(format!(
+                    "That conversation isn't one of {}'s in this project.",
+                    ws.name
+                ))
+            })?;
+            if state.sessions.contains(&found.id) {
+                return Err(CommandError::Refused(
+                    "That conversation is already open.".into(),
+                ));
+            }
+            Some(found)
+        }
+        Some(_) => {
+            return Err(CommandError::Invalid(
+                "Only Claude Code conversations can be resumed.".into(),
+            ));
+        }
+        None => None,
     };
 
     let env = IsolatedEnv::build(&ws, &layout, &state.host);
-    let id = uuid::Uuid::new_v4().to_string();
-    let purpose = if sign_in {
-        Purpose::SignIn
-    } else {
-        Purpose::Work {
+    let id = resumed
+        .as_ref()
+        .map_or_else(|| uuid::Uuid::new_v4().to_string(), |c| c.id.clone());
+    let purpose = match (&resumed, sign_in) {
+        (_, true) => Purpose::SignIn,
+        (Some(c), false) => Purpose::Resume {
+            claude_session_id: c.id.clone(),
+        },
+        (None, false) => Purpose::Work {
             claude_session_id: (agent == AgentKind::Claude).then(|| id.clone()),
-        }
+        },
     };
     let spec = agent.launch(&purpose);
     let pty = PtySession::spawn(&env, &spec, &cwd, cols.max(20), rows.max(5), move |event| {
         let _ = on_event.send(event);
     })
     .map_err(|e| CommandError::Invalid(e.to_string()))?;
-    let title = match (sign_in, &project) {
-        (true, _) => format!("Sign in · {}", agent.label()),
-        (false, Some(name)) => format!("{} · {name}", agent.label()),
-        (false, None) => agent.label().to_owned(),
+    // The sidebar shows a session under its project, so the title is just the agent.
+    let title = match (&resumed, sign_in) {
+        (_, true) => format!("Sign in · {}", agent.label()),
+        (Some(c), false) => c.title.clone(),
+        (None, false) => agent.label().to_owned(),
     };
     let info = SessionInfo {
         id,
@@ -286,11 +465,15 @@ pub async fn open_session(
         agent,
         title,
         sign_in,
-        project_path: project.is_some().then(|| cwd.display().to_string()),
+        project_path: in_project.then(|| cwd.display().to_string()),
     };
     state.sessions.insert(info.clone(), pty);
-    let detail =
-        serde_json::json!({ "agent": agent, "signIn": sign_in, "project": info.project_path });
+    let detail = serde_json::json!({
+        "agent": agent,
+        "signIn": sign_in,
+        "project": info.project_path,
+        "resumed": resumed.is_some(),
+    });
     let _ = state
         .store
         .record_event(Some(&ws.id), "session_opened", &detail)

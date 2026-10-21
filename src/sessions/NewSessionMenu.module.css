@@ -15,6 +15,26 @@
   color: var(--otto-color-text-primary);
 }
 
+/* The "+" that appears on a hovered project row. */
+.iconTrigger {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--otto-radius-xs);
+  background: transparent;
+  color: var(--otto-color-text-secondary);
+  font-size: var(--otto-type-callout-size);
+}
+
+.iconTrigger:hover,
+.iconTrigger[data-state='open'] {
+  background: var(--otto-color-fill-selected);
+  color: var(--otto-color-text-primary);
+}
+
 .menu {
   min-width: 240px;
   padding: var(--otto-space-1);

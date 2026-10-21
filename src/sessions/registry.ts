@@ -24,7 +24,7 @@ interface SessionsState {
   open: (
     workspaceId: string,
     agent: AgentKind,
-    options?: { signIn?: boolean; projectPath?: string | undefined },
+    options?: { signIn?: boolean; projectPath?: string | undefined; resumeId?: string | undefined },
   ) => Promise<LiveSession>;
   close: (id: string) => void;
   select: (workspaceId: string, id: string | undefined) => void;
@@ -79,6 +79,7 @@ export const useSessions = create<SessionsState>((set, get) => ({
       agent,
       signIn,
       options.projectPath ?? null,
+      options.resumeId ?? null,
       100,
       30,
       channel,

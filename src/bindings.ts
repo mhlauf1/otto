@@ -26,12 +26,28 @@ export const commands = {
 	listProjects: (workspaceId: string) => typedError<Project[], CommandError>(__TAURI_INVOKE("list_projects", { workspaceId })),
 	/**  Classify one folder Mike picked by hand (outside the scanned locations). */
 	inspectProject: (path: string) => typedError<DiscoveredRepo, CommandError>(__TAURI_INVOKE("inspect_project", { path })),
+	listProjectGroups: (workspaceId: string) => typedError<ProjectGroup[], CommandError>(__TAURI_INVOKE("list_project_groups", { workspaceId })),
+	createProjectGroup: (workspaceId: string, name: string) => typedError<ProjectGroup, CommandError>(__TAURI_INVOKE("create_project_group", { workspaceId, name })),
+	renameProjectGroup: (workspaceId: string, groupId: string, name: string) => typedError<null, CommandError>(__TAURI_INVOKE("rename_project_group", { workspaceId, groupId, name })),
+	/**  Delete a group; its projects stay in the workspace, ungrouped. */
+	deleteProjectGroup: (workspaceId: string, groupId: string) => typedError<null, CommandError>(__TAURI_INVOKE("delete_project_group", { workspaceId, groupId })),
+	reorderProjectGroups: (workspaceId: string, groupIds: string[]) => typedError<null, CommandError>(__TAURI_INVOKE("reorder_project_groups", { workspaceId, groupIds })),
+	/**  Put a project in one of its workspace's groups (`None` for no group). */
+	moveProject: (workspaceId: string, path: string, groupId: string | null) => typedError<null, CommandError>(__TAURI_INVOKE("move_project", { workspaceId, path, groupId })),
+	/**  Name a project (empty goes back to the folder name). Only Otto's label changes. */
+	renameProject: (workspaceId: string, path: string, name: string) => typedError<null, CommandError>(__TAURI_INVOKE("rename_project", { workspaceId, path, name })),
+	/**
+	 *  Earlier Claude conversations in a project (or General), newest first. Read only from
+	 *  this workspace's own Claude config, so another workspace's history can't appear.
+	 */
+	listPastConversations: (workspaceId: string, projectPath: string | null) => typedError<PastConversation[], CommandError>(__TAURI_INVOKE("list_past_conversations", { workspaceId, projectPath })),
 	/**
 	 *  Open an agent (or shell) in a real terminal inside the workspace's isolated
 	 *  environment, optionally inside one of its projects. Output streams to `on_event`.
-	 *  With `sign_in`, runs the CLI's own login flow.
+	 *  With `sign_in`, runs the CLI's own login flow. With `resume_id`, continues an earlier
+	 *  Claude conversation from this workspace and folder.
 	 */
-	openSession: (workspaceId: string, agent: AgentKind, signIn: boolean, projectPath: string | null, cols: number, rows: number, onEvent: Channel<PtyEvent>) => typedError<SessionInfo, CommandError>(__TAURI_INVOKE("open_session", { workspaceId, agent, signIn, projectPath, cols, rows, onEvent })),
+	openSession: (workspaceId: string, agent: AgentKind, signIn: boolean, projectPath: string | null, resumeId: string | null, cols: number, rows: number, onEvent: Channel<PtyEvent>) => typedError<SessionInfo, CommandError>(__TAURI_INVOKE("open_session", { workspaceId, agent, signIn, projectPath, resumeId, cols, rows, onEvent })),
 	/**  Keystrokes, paste and dictation all arrive here. */
 	writeSession: (id: string, data: string) => typedError<null, CommandError>(__TAURI_INVOKE("write_session", { id, data })),
 	resizeSession: (id: string, cols: number, rows: number) => typedError<null, CommandError>(__TAURI_INVOKE("resize_session", { id, cols, rows })),
@@ -110,11 +126,31 @@ export type Identity = {
 	githubUser: GithubOwner,
 };
 
+/**  A conversation Otto can resume. */
+export type PastConversation = {
+	/**  Claude's session ID (a UUID), passed to `claude --resume`. */
+	id: string,
+	title: string,
+	/**  Last written, in seconds since 1970. */
+	updatedSecs: number,
+};
+
 /**  A project registered to a workspace. */
 export type Project = {
 	path: string,
+	/**  What the sidebar shows: Mike's chosen name, else the folder name. */
 	name: string,
+	/**  The folder's own name, e.g. `brady-digital`. */
+	folderName: string,
 	remoteUrl: string | null,
+	/**  The group the project sits in; `None` means ungrouped. */
+	groupId: string | null,
+};
+
+/**  A section of projects inside one workspace, such as Lauf's "Clients" (ADR-017). */
+export type ProjectGroup = {
+	id: string,
+	name: string,
 };
 
 /**  What a session sends to the UI. */
@@ -130,7 +166,7 @@ export type SessionInfo = {
 	agent: AgentKind,
 	title: string,
 	signIn: boolean,
-	/**  The project the session runs in; `None` means the home folder. */
+	/**  The project the session runs in; `None` means General (the home folder). */
 	projectPath: string | null,
 };
 

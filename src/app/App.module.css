@@ -17,15 +17,14 @@
   color: var(--otto-color-text-tertiary);
 }
 
-/* ── Sidebar: translucent, so native vibrancy shows through ─────────── */
+/* ── Main ───────────────────────────────────────────────────────────── */
 
-.sidebar {
+.main {
   display: flex;
   flex-direction: column;
-  gap: var(--otto-space-4);
-  padding: 0 var(--otto-space-3) var(--otto-space-4);
-  background: var(--otto-color-sidebar);
-  border-right: 1px solid var(--otto-color-border-subtle);
+  min-width: 0;
+  min-height: 0;
+  background: var(--otto-color-surface);
 }
 
 .titlebar {
@@ -37,136 +36,37 @@
   flex-shrink: 0;
 }
 
-/* Sits directly under the traffic lights. */
-.brand {
-  display: flex;
-  align-items: center;
-  gap: var(--otto-space-2);
-  padding: 0 var(--otto-space-2);
-  margin-top: calc(var(--otto-space-2) * -1);
-  color: var(--otto-color-text-primary);
+/* Workspace · project · session: where you are, always. */
+.titlebarCrumbs {
+  overflow: hidden;
+  max-width: calc(100% - var(--otto-space-20) * 2);
+  color: var(--otto-color-text-secondary);
+  font-size: var(--otto-type-headline-size);
+  font-weight: var(--otto-type-headline-weight);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
 }
 
-.sectionLabel {
-  margin: 0 0 var(--otto-space-1);
-  padding: 0 var(--otto-space-2);
-  color: var(--otto-color-text-tertiary);
-  font-size: var(--otto-type-caption-size);
-  line-height: var(--otto-type-caption-line);
-  font-weight: var(--otto-type-caption-weight);
-  letter-spacing: var(--otto-type-caption-tracking);
+.titlebarWorkspace {
+  color: var(--otto-accent-text);
 }
 
-.list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--otto-space-0-5);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.row {
-  display: flex;
-  align-items: center;
-  gap: var(--otto-space-2);
-  width: 100%;
-  height: 28px;
-  padding: 0 var(--otto-space-2);
+.titlebarButton {
+  position: absolute;
+  right: var(--otto-space-3);
+  padding: var(--otto-space-1) var(--otto-space-2);
   border: 0;
   border-radius: var(--otto-radius-sm);
   background: transparent;
-  text-align: left;
-  transition-property: background-color;
-  transition-duration: var(--otto-duration-fast);
-  transition-timing-function: var(--otto-easing-standard);
+  color: var(--otto-color-text-secondary);
+  font-size: var(--otto-type-footnote-size);
 }
 
-.row:hover {
+.titlebarButton:hover,
+.titlebarButton[aria-pressed='true'] {
   background: var(--otto-color-fill-hover);
-}
-
-.row[aria-current='true'] {
-  background: var(--otto-color-fill-selected);
-}
-
-/* Each row carries its own workspace accent, regardless of which one is active. */
-.dot {
-  width: 8px;
-  height: 8px;
-  border-radius: var(--otto-radius-full);
-  background: var(--otto-accent);
-}
-
-.rowName {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1;
-}
-
-.kbd {
-  color: var(--otto-color-text-tertiary);
-  font-family: var(--otto-font-sans);
-  font-size: var(--otto-type-footnote-size);
-}
-
-.identityFooter {
-  display: flex;
-  align-items: center;
-  gap: var(--otto-space-2);
-  margin-top: auto;
-  padding: var(--otto-space-2);
-  border-radius: var(--otto-radius-md);
-}
-
-.avatar {
-  display: grid;
-  flex-shrink: 0;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  border-radius: var(--otto-radius-full);
-  background: var(--otto-accent);
-  color: var(--otto-color-text-on-accent);
-  font-size: var(--otto-type-caption-size);
-  font-weight: var(--otto-type-headline-weight);
-}
-
-.identityText {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.identityName {
-  font-weight: var(--otto-type-headline-weight);
-}
-
-.identityEmail {
-  overflow: hidden;
-  color: var(--otto-color-text-tertiary);
-  font-size: var(--otto-type-caption-size);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sidebarFooter {
-  margin: auto 0 0;
-  padding: 0 var(--otto-space-2);
-  color: var(--otto-color-text-tertiary);
-  font-size: var(--otto-type-footnote-size);
-  line-height: var(--otto-type-footnote-line);
-}
-
-/* ── Main ───────────────────────────────────────────────────────────── */
-
-.main {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-  background: var(--otto-color-surface);
+  color: var(--otto-color-text-primary);
 }
 
 .stage {
@@ -188,136 +88,4 @@
   background: var(--otto-color-fill-hover);
   color: var(--otto-color-danger);
   font-size: var(--otto-type-footnote-size);
-}
-
-.subtleButton {
-  width: 100%;
-  margin-top: var(--otto-space-1);
-  padding: var(--otto-space-1) var(--otto-space-2);
-  border: 0;
-  border-radius: var(--otto-radius-sm);
-  background: transparent;
-  color: var(--otto-color-text-tertiary);
-  text-align: left;
-}
-
-.subtleButton:hover {
-  background: var(--otto-color-fill-hover);
-  color: var(--otto-color-text-primary);
-}
-
-.localOnly {
-  color: var(--otto-color-text-tertiary);
-  font-size: var(--otto-type-caption-size);
-}
-
-.sessionState {
-  width: 6px;
-  height: 6px;
-  border-radius: var(--otto-radius-full);
-  background: var(--otto-color-border-strong);
-}
-
-.sessionState[data-state='running'] {
-  background: var(--otto-accent);
-}
-
-.titlebarButton {
-  position: absolute;
-  right: var(--otto-space-3);
-  padding: var(--otto-space-1) var(--otto-space-2);
-  border: 0;
-  border-radius: var(--otto-radius-sm);
-  background: transparent;
-  color: var(--otto-color-text-secondary);
-  font-size: var(--otto-type-footnote-size);
-}
-
-.composeButton {
-  right: calc(var(--otto-space-3) + var(--otto-space-20));
-}
-
-.titlebarButton:hover,
-.titlebarButton[aria-pressed='true'] {
-  background: var(--otto-color-fill-hover);
-  color: var(--otto-color-text-primary);
-}
-
-.health {
-  font-size: var(--otto-type-caption-size);
-  font-weight: var(--otto-type-headline-weight);
-  color: var(--otto-color-success);
-}
-
-.health[data-state='blocked'] {
-  color: var(--otto-color-danger);
-}
-
-.titlebarWorkspace {
-  color: var(--otto-accent-text);
-  font-size: var(--otto-type-headline-size);
-  font-weight: var(--otto-type-headline-weight);
-  pointer-events: none;
-}
-
-.hero {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--otto-space-4);
-  padding: var(--otto-space-12) var(--otto-space-8);
-  margin-top: calc(var(--otto-titlebar-height) * -1);
-  text-align: center;
-  color: var(--otto-color-text-primary);
-}
-
-.headline {
-  max-width: 22ch;
-  margin: var(--otto-space-4) 0 0;
-  font-family: var(--otto-font-display);
-  font-size: var(--otto-type-display-size);
-  line-height: var(--otto-type-display-line);
-  font-weight: var(--otto-type-display-weight);
-  letter-spacing: var(--otto-type-display-tracking);
-  text-wrap: balance;
-}
-
-.subhead {
-  margin: 0;
-  color: var(--otto-color-text-secondary);
-  font-size: var(--otto-type-callout-size);
-  line-height: var(--otto-type-callout-line);
-}
-
-.accentText {
-  color: var(--otto-accent-text);
-  font-weight: var(--otto-type-headline-weight);
-}
-
-.status {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--otto-space-2);
-  margin: var(--otto-space-6) 0 0;
-  padding: var(--otto-space-1-5) var(--otto-space-3);
-  border: 1px solid var(--otto-color-border-subtle);
-  border-radius: var(--otto-radius-full);
-  color: var(--otto-color-text-secondary);
-  font-family: var(--otto-font-mono);
-  font-size: var(--otto-type-footnote-size);
-  line-height: var(--otto-type-footnote-line);
-  user-select: text;
-}
-
-.status[data-state='error'] {
-  font-family: var(--otto-font-sans);
-}
-
-.statusDot {
-  width: 6px;
-  height: 6px;
-  border-radius: var(--otto-radius-full);
-  background: var(--otto-color-success);
 }

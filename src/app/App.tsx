@@ -1,30 +1,28 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
-import type { AgentKind, DoctorReport, Workspace } from '../bindings';
+import type { AgentKind, ProjectGroup, Workspace } from '../bindings';
 import { OttoMark } from '../brand/OttoMark';
-import { OttoWordmark } from '../brand/OttoWordmark';
-import { Composer } from '../composer/Composer';
 import { DoctorPanel } from '../doctor/DoctorPanel';
+import { Knowledge } from '../overview/Knowledge';
+import { Overview } from '../overview/Overview';
 import { CommandPalette, type PaletteAction } from '../palette/CommandPalette';
-import { SessionError, useSessions } from '../sessions/registry';
 import { ImportProjects } from '../projects/ImportProjects';
-import { ClaudeSetup } from '../setup/ClaudeSetup';
-import { NewSessionMenu } from '../sessions/NewSessionMenu';
+import { sessionLabels } from '../sessions/labels';
+import { SessionError, useSessions } from '../sessions/registry';
 import { TerminalView } from '../sessions/TerminalView';
-import { useWorkspaceUi } from '../state/workspace';
+import { ClaudeSetup } from '../setup/ClaudeSetup';
+import { Sidebar } from '../sidebar/Sidebar';
+import { useWorkspaceUi, type WorkspacePage } from '../state/workspace';
 import styles from './App.module.css';
 import {
   FriendlyError,
   queryKeys,
   useAllDoctors,
-  useAppInfo,
   useDoctor,
+  useProjectGroups,
   useProjects,
   useWorkspaces,
 } from './queries';
-
-/** Which half of the mark a workspace lights: the first two workspaces own a half each. */
-const sideFor = (index: number) => (index === 0 ? 'left' : index === 1 ? 'right' : 'none');
 
 const NEW_SESSION: { agent: AgentKind; label: string }[] = [
   { agent: 'claude', label: 'Claude' },
@@ -33,14 +31,22 @@ const NEW_SESSION: { agent: AgentKind; label: string }[] = [
 ];
 
 /**
- * Main window: workspaces from the core, workspace tint, terminal sessions and the
- * Identity Doctor. The terminal is the everyday input; ⌘L opens the composer for long prompts.
+ * Main window: sidebar (workspace → groups → projects → sessions), the selected session's
+ * terminal or a workspace page, and the Identity Doctor. The terminal is the only input.
  */
 export function App() {
   const workspaces = useWorkspaces();
   const list = useMemo(() => workspaces.data ?? [], [workspaces.data]);
-  const { activeId, setActive, inspectorOpen, toggleInspector, projectByWorkspace, setProject } =
-    useWorkspaceUi();
+  const {
+    activeId,
+    setActive,
+    inspectorOpen,
+    toggleInspector,
+    projectByWorkspace,
+    setProject,
+    pageByWorkspace,
+    setPage,
+  } = useWorkspaceUi();
   const activeIndex = Math.max(
     0,
     list.findIndex((w) => w.id === activeId),
@@ -48,7 +54,9 @@ export function App() {
   const active = list[activeIndex];
   const doctors = useAllDoctors(list);
   const projects = useProjects(active?.id);
+  const groups = useProjectGroups(active?.id);
   const [importOpen, setImportOpen] = useState(false);
+  const [importInto, setImportInto] = useState<ProjectGroup | undefined>(undefined);
   const [setupOpen, setSetupOpen] = useState(false);
   const activeProject = active
     ? (projects.data ?? []).find((p) => p.path === projectByWorkspace[active.id])
@@ -59,7 +67,6 @@ export function App() {
   const { sessions, activeByWorkspace, open, close, select } = useSessions();
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [composerOpen, setComposerOpen] = useState(false);
   const activeSessionId = active ? activeByWorkspace[active.id] : undefined;
   const workspaceSessions = sessions.filter((s) => s.info.workspaceId === active?.id);
   const activeSession = sessions.find((s) => s.info.id === activeSessionId);
@@ -75,12 +82,32 @@ export function App() {
     });
   }, [queryClient]);
 
-  const startSession = async (workspaceId: string, agent: AgentKind, signIn = false) => {
-    // Sign-in flows run in the home folder; work sessions open in the selected project.
-    const projectPath = signIn ? undefined : projectByWorkspace[workspaceId];
+  // A session opening or closing changes which earlier conversations to list.
+  const sessionCount = sessions.length;
+  useEffect(() => {
+    void queryClient.invalidateQueries({ queryKey: ['past'] });
+  }, [queryClient, sessionCount]);
+
+  /**
+   * Every caller says where the session runs: `projectPath`, or `undefined` for General.
+   * Sign-in flows always run in the home folder. `resumeId` continues a Claude conversation.
+   */
+  const startSession = async (
+    workspaceId: string,
+    agent: AgentKind,
+    {
+      signIn = false,
+      projectPath,
+      resumeId,
+    }: { signIn?: boolean; projectPath: string | undefined; resumeId?: string },
+  ) => {
     setSessionError(null);
     try {
-      await open(workspaceId, agent, { signIn, projectPath });
+      await open(workspaceId, agent, {
+        signIn,
+        projectPath: signIn ? undefined : projectPath,
+        resumeId,
+      });
     } catch (e) {
       setSessionError(e instanceof SessionError ? e.message : 'Couldn’t start the session.');
     }
@@ -96,11 +123,6 @@ export function App() {
         setPaletteOpen((o) => !o);
         return;
       }
-      if (!e.shiftKey && e.code === 'KeyL' && activeSession) {
-        e.preventDefault();
-        setComposerOpen(true);
-        return;
-      }
       if (e.shiftKey && e.code === 'KeyI') {
         e.preventDefault();
         toggleInspector();
@@ -108,7 +130,7 @@ export function App() {
       }
       if (!e.shiftKey && e.code === 'KeyT' && active) {
         e.preventDefault();
-        void startSession(active.id, 'claude');
+        void startSession(active.id, 'claude', { projectPath: activeProject?.path });
         return;
       }
       if (!e.shiftKey && e.code === 'KeyW' && activeSessionId) {
@@ -150,6 +172,23 @@ export function App() {
     void queryClient.invalidateQueries({ queryKey: queryKeys.doctor(w.id) });
   };
 
+  const page: WorkspacePage = pageByWorkspace[active.id] ?? 'overview';
+  const showPage = (p: WorkspacePage) => {
+    setPage(active.id, p);
+    select(active.id, undefined);
+  };
+  const projectList = projects.data ?? [];
+  const projectNameFor = (path: string | null) =>
+    projectList.find((p) => p.path === path)?.name ?? 'General';
+  const activeLabel = activeSession
+    ? sessionLabels(
+        workspaceSessions.filter((s) => s.info.projectPath === activeSession.info.projectPath),
+      ).get(activeSession.info.id)
+    : undefined;
+  const crumbs = activeSession
+    ? [active.name, projectNameFor(activeSession.info.projectPath), activeLabel]
+    : [active.name, page === 'overview' ? 'Overview' : 'Knowledge'];
+
   const paletteActions: PaletteAction[] = [
     ...NEW_SESSION.map(({ agent, label }) => ({
       id: `new-${agent}`,
@@ -158,9 +197,27 @@ export function App() {
       keywords: agent === 'shell' ? 'terminal zsh' : 'agent',
       ...(agent === 'claude' ? { shortcut: '⌘T' } : {}),
       run: () => {
-        void startSession(active.id, agent);
+        void startSession(active.id, agent, { projectPath: activeProject?.path });
       },
     })),
+    {
+      id: 'overview',
+      group: active.name,
+      label: `Go to ${active.name} Overview`,
+      keywords: 'home start dashboard',
+      run: () => {
+        showPage('overview');
+      },
+    },
+    {
+      id: 'knowledge',
+      group: active.name,
+      label: `Open ${active.name} Knowledge`,
+      keywords: 'notes context docs',
+      run: () => {
+        showPage('knowledge');
+      },
+    },
     ...list.map((w, i) => ({
       id: `ws-${w.id}`,
       group: 'Workspaces',
@@ -176,7 +233,7 @@ export function App() {
       return {
         id: `go-${s.info.id}`,
         group: 'Sessions',
-        label: `${s.info.title} · ${ws?.name ?? ''}`,
+        label: [ws?.name, projectNameFor(s.info.projectPath), s.info.title].join(' · '),
         keywords: 'jump go',
         run: () => {
           if (ws) setActive(ws.id);
@@ -187,8 +244,8 @@ export function App() {
     ...(projects.data ?? []).map((p) => ({
       id: `project-${p.path}`,
       group: `${active.name} projects`,
-      label: `Use project ${p.name}`,
-      keywords: 'open cd folder repo',
+      label: `New sessions open in ${p.name}`,
+      keywords: 'use project open cd folder repo',
       run: () => {
         setProject(active.id, p.path);
       },
@@ -232,156 +289,52 @@ export function App() {
       data-inspector={inspectorOpen ? 'open' : 'closed'}
       data-testid="window"
     >
-      <aside className={styles.sidebar} aria-label="Sidebar">
-        <div className={styles.titlebar} data-tauri-drag-region />
-        <div className={styles.brand}>
-          <OttoMark size={18} lit={sideFor(activeIndex)} />
-          <OttoWordmark height={13} />
-        </div>
-
-        <nav aria-label="Workspaces">
-          <p className={styles.sectionLabel}>Workspaces</p>
-          <ul className={styles.list}>
-            {list.map((w, i) => (
-              <li key={w.id}>
-                <button
-                  type="button"
-                  className={styles.row}
-                  data-tint={w.tint}
-                  aria-current={w.id === active.id ? 'true' : undefined}
-                  onClick={() => {
-                    switchTo(w);
-                  }}
-                >
-                  <span className={styles.dot} aria-hidden />
-                  <span className={styles.rowName}>{w.name}</span>
-                  <HealthBadge report={doctors[i]?.data} />
-                  <kbd className={styles.kbd}>⌘{i + 1}</kbd>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </nav>
-
-        <nav aria-label={`${active.name} projects`}>
-          <p className={styles.sectionLabel}>Projects</p>
-          <ul className={styles.list}>
-            <li>
-              <button
-                type="button"
-                className={styles.row}
-                aria-current={activeProject === undefined ? 'true' : undefined}
-                onClick={() => {
-                  setProject(active.id, undefined);
-                }}
-              >
-                <span className={styles.rowName}>No project (home folder)</span>
-              </button>
-            </li>
-            {(projects.data ?? []).map((p) => (
-              <li key={p.path}>
-                <button
-                  type="button"
-                  className={styles.row}
-                  aria-current={p.path === activeProject?.path ? 'true' : undefined}
-                  title={p.remoteUrl ?? `${p.path} (local only, pushes locked)`}
-                  onClick={() => {
-                    setProject(active.id, p.path);
-                  }}
-                >
-                  <span className={styles.rowName}>{p.name}</span>
-                  {p.remoteUrl === null ? <span className={styles.localOnly}>local</span> : null}
-                </button>
-              </li>
-            ))}
-          </ul>
-          <button
-            type="button"
-            className={styles.subtleButton}
-            onClick={() => {
-              setImportOpen(true);
-            }}
-          >
-            Import projects…
-          </button>
-        </nav>
-
-        <nav aria-label={`${active.name} sessions`}>
-          <p className={styles.sectionLabel}>Sessions</p>
-          <ul className={styles.list}>
-            <li>
-              <button
-                type="button"
-                className={styles.row}
-                aria-current={activeSessionId === undefined ? 'true' : undefined}
-                onClick={() => {
-                  select(active.id, undefined);
-                }}
-              >
-                <span className={styles.rowName}>Home</span>
-              </button>
-            </li>
-            {workspaceSessions.map((s) => (
-              <li key={s.info.id}>
-                <button
-                  type="button"
-                  className={styles.row}
-                  aria-current={s.info.id === activeSessionId ? 'true' : undefined}
-                  onClick={() => {
-                    select(active.id, s.info.id);
-                  }}
-                >
-                  <span
-                    className={styles.sessionState}
-                    data-state={s.exit === undefined ? 'running' : 'done'}
-                    aria-label={s.exit === undefined ? 'Running' : 'Ended'}
-                    role="img"
-                  />
-                  <span className={styles.rowName}>{s.info.title}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-          <NewSessionMenu
-            workspaceName={activeProject ? `${active.name} · ${activeProject.name}` : active.name}
-            onPick={(agent) => {
-              void startSession(active.id, agent);
-            }}
-          />
-        </nav>
-
-        <div className={styles.identityFooter} data-tint={active.tint}>
-          <span className={styles.avatar} aria-hidden>
-            {active.name.slice(0, 1)}
-          </span>
-          <span className={styles.identityText}>
-            <span className={styles.identityName}>{active.identity.githubUser}</span>
-            <span className={styles.identityEmail}>{active.identity.gitEmail}</span>
-          </span>
-        </div>
-      </aside>
+      <Sidebar
+        workspaces={list}
+        active={active}
+        activeIndex={activeIndex}
+        reports={doctors.map((d) => d.data)}
+        onSwitch={switchTo}
+        page={page}
+        onPage={showPage}
+        projects={projectList}
+        groups={groups.data ?? []}
+        sessions={workspaceSessions}
+        activeSessionId={activeSessionId}
+        currentProject={activeProject}
+        onSelectSession={(id) => {
+          select(active.id, id);
+        }}
+        onSetProject={(path) => {
+          setProject(active.id, path);
+        }}
+        onNewSession={(agent, projectPath) => {
+          void startSession(active.id, agent, { projectPath });
+        }}
+        onResume={(resumeId, projectPath) => {
+          void startSession(active.id, 'claude', { projectPath, resumeId });
+        }}
+        onImport={(group) => {
+          setImportInto(group);
+          setImportOpen(true);
+        }}
+        onGroupsChanged={() => {
+          void queryClient.invalidateQueries({ queryKey: queryKeys.groups(active.id) });
+          void queryClient.invalidateQueries({ queryKey: queryKeys.projects(active.id) });
+        }}
+        onError={setSessionError}
+      />
 
       <main className={styles.main}>
         <div className={styles.titlebar} data-tauri-drag-region>
-          <span className={styles.titlebarWorkspace}>
-            {active.name}
-            {activeSessionId
-              ? ` · ${sessions.find((s) => s.info.id === activeSessionId)?.info.title ?? ''}`
-              : ''}
+          <span className={styles.titlebarCrumbs}>
+            {crumbs.map((c, i) => (
+              <span key={i} className={i === 0 ? styles.titlebarWorkspace : undefined}>
+                {i > 0 ? ' · ' : ''}
+                {c}
+              </span>
+            ))}
           </span>
-          {activeSession ? (
-            <button
-              type="button"
-              className={[styles.titlebarButton, styles.composeButton].join(' ')}
-              onClick={() => {
-                setComposerOpen((o) => !o);
-              }}
-              aria-pressed={composerOpen}
-              title="Compose a long prompt (⌘L)"
-            >
-              Compose
-            </button>
-          ) : null}
           <button
             type="button"
             className={styles.titlebarButton}
@@ -404,38 +357,50 @@ export function App() {
           {sessions.map((s) => (
             <TerminalView key={s.info.id} session={s} visible={s.info.id === activeSessionId} />
           ))}
-          {activeSession && composerOpen ? (
-            <Composer
-              key={activeSession.info.id}
-              workspace={active}
-              session={activeSession}
-              onClose={() => {
-                setComposerOpen(false);
-                activeSession.term.focus();
-              }}
-            />
-          ) : null}
         </div>
 
-        {activeSessionId === undefined ? (
-          <section className={styles.hero}>
-            <OttoMark
-              size={88}
-              lit={sideFor(activeIndex)}
-              label={`Otto — ${active.name} workspace`}
-            />
-            <h1 className={styles.headline}>Every identity, signed in. Nothing crossing over.</h1>
-            <p className={styles.subhead}>
-              You’re in <strong className={styles.accentText}>{active.name}</strong> as{' '}
-              {active.identity.githubUser}. Press ⌘T for a Claude session or ⌘K for everything else.
-            </p>
-            <CoreStatus />
-          </section>
+        {activeSessionId === undefined && page === 'overview' ? (
+          <Overview
+            workspace={active}
+            workspaceIndex={activeIndex}
+            report={doctor.data}
+            projects={projectList}
+            groups={groups.data ?? []}
+            sessions={workspaceSessions}
+            onOpenSession={(id) => {
+              select(active.id, id);
+            }}
+            onNewClaude={(projectPath) => {
+              if (projectPath) setProject(active.id, projectPath);
+              void startSession(active.id, 'claude', { projectPath });
+            }}
+            onShowIdentity={() => {
+              if (!inspectorOpen) toggleInspector();
+            }}
+          />
+        ) : null}
+        {activeSessionId === undefined && page === 'knowledge' ? (
+          <Knowledge workspace={active} />
         ) : null}
       </main>
 
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} actions={paletteActions} />
-      <ImportProjects open={importOpen} onOpenChange={setImportOpen} workspaces={list} />
+      <ImportProjects
+        open={importOpen}
+        onOpenChange={(o) => {
+          setImportOpen(o);
+          if (!o) {
+            setImportInto(undefined);
+            void queryClient.invalidateQueries({ queryKey: queryKeys.groups(active.id) });
+          }
+        }}
+        workspaces={list}
+        target={
+          importInto
+            ? { workspaceId: active.id, groupId: importInto.id, groupName: importInto.name }
+            : undefined
+        }
+      />
       <ClaudeSetup open={setupOpen} onOpenChange={setSetupOpen} workspaces={list} />
 
       {inspectorOpen ? (
@@ -449,49 +414,10 @@ export function App() {
             setSetupOpen(true);
           }}
           onSignIn={(agent) => {
-            void startSession(active.id, agent, true);
+            void startSession(active.id, agent, { signIn: true, projectPath: undefined });
           }}
         />
       ) : null}
     </div>
-  );
-}
-
-/** Tiny ✓ / ✕ next to each workspace, so a red identity is visible from anywhere. */
-function HealthBadge({ report }: { report: DoctorReport | undefined }) {
-  if (!report) return null;
-  return (
-    <span
-      className={styles.health}
-      data-state={report.pushAllowed ? 'ok' : 'blocked'}
-      role="img"
-      aria-label={report.pushAllowed ? 'Identity verified' : 'Identity problem: pushes blocked'}
-    >
-      {report.pushAllowed ? '✓' : '✕'}
-    </span>
-  );
-}
-
-function CoreStatus() {
-  const info = useAppInfo();
-
-  if (info.isPending) {
-    return <p className={styles.status}>Connecting to the core…</p>;
-  }
-  if (info.isError) {
-    const message =
-      info.error instanceof FriendlyError ? info.error.message : 'The core didn’t respond.';
-    return (
-      <p className={styles.status} data-state="error" role="status">
-        {message}
-      </p>
-    );
-  }
-  const { name, version, os, arch } = info.data;
-  return (
-    <p className={styles.status} data-state="ok" role="status">
-      <span className={styles.statusDot} aria-hidden />
-      {name} {version} · {os} · {arch}
-    </p>
   );
 }
