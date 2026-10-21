@@ -79,6 +79,22 @@ export const commands = {
 	 *  `codex resume`, Shell with its saved scrollback. Projects are re-verified.
 	 */
 	resumePausedSession: (workspaceId: string, id: string, cols: number, rows: number, onEvent: Channel<PtyEvent>) => typedError<SessionInfo, CommandError>(__TAURI_INVOKE("resume_paused_session", { workspaceId, id, cols, rows, onEvent })),
+	/**  Prompts waiting for a session. */
+	listQueue: (workspaceId: string, sessionId: string) => typedError<QueueItem[], CommandError>(__TAURI_INVOKE("list_queue", { workspaceId, sessionId })),
+	/**  Add a prompt to "Up next". If the agent is already waiting for a prompt, it goes now. */
+	enqueuePrompt: (workspaceId: string, sessionId: string, prompt: string) => typedError<QueueItem, CommandError>(__TAURI_INVOKE("enqueue_prompt", { workspaceId, sessionId, prompt })),
+	unqueuePrompt: (workspaceId: string, itemId: string) => typedError<null, CommandError>(__TAURI_INVOKE("unqueue_prompt", { workspaceId, itemId })),
+	/**
+	 *  Run a task in parallel (SPEC §8.2): a new worktree of the project on an `otto/…` branch,
+	 *  with a new session of `agent` started there on `prompt`.
+	 */
+	startParallelTask: (workspaceId: string, projectPath: string, agent: AgentKind, prompt: string, cols: number, rows: number, onEvent: Channel<PtyEvent>) => typedError<SessionInfo, CommandError>(__TAURI_INVOKE("start_parallel_task", { workspaceId, projectPath, agent, prompt, cols, rows, onEvent })),
+	listWorktrees: (workspaceId: string) => typedError<WorktreeInfo[], CommandError>(__TAURI_INVOKE("list_worktrees", { workspaceId })),
+	/**
+	 *  Remove a parallel task's worktree. Refused while a session runs in it or it has
+	 *  uncommitted changes. Its branch stays.
+	 */
+	removeWorktree: (workspaceId: string, id: string) => typedError<null, CommandError>(__TAURI_INVOKE("remove_worktree", { workspaceId, id })),
 	/**  Sessions still running (for example after the window reloads). */
 	listSessions: () => __TAURI_INVOKE<SessionInfo[]>("list_sessions"),
 	/**  What can be copied from Mike's normal `~/.claude` setup into a workspace. */
@@ -89,6 +105,7 @@ export const commands = {
 
 /** Events */
 export const events = {
+	queueChanged: makeEvent<QueueChanged>("queue-changed"),
 	sessionStatusChanged: makeEvent<SessionStatusChanged>("session-status-changed"),
 };
 
@@ -213,6 +230,19 @@ export type PtyEvent =
 /**  The program exited. `code` is `None` if it was killed by a signal. */
 { kind: "exit"; code: number | null };
 
+/**  A session's "Up next" list changed (added, removed or sent). */
+export type QueueChanged = {
+	workspaceId: string,
+	sessionId: string,
+};
+
+/**  A prompt waiting to be sent when its session's agent finishes (M5b). */
+export type QueueItem = {
+	id: string,
+	sessionId: string,
+	prompt: string,
+};
+
 /**  A session Otto remembers across launches. */
 export type SavedSession = {
 	id: string,
@@ -225,6 +255,8 @@ export type SavedSession = {
 	cliSessionId: string | null,
 	status: SessionStatus,
 	lastActiveAt: string,
+	/**  Set when the session runs in a parallel task's worktree (M5b). */
+	worktreeId: string | null,
 };
 
 export type SessionInfo = {
@@ -235,6 +267,8 @@ export type SessionInfo = {
 	signIn: boolean,
 	/**  The project the session runs in; `None` means General (the home folder). */
 	projectPath: string | null,
+	/**  A parallel task's branch (M5b); the session runs in that branch's worktree. */
+	branch: string | null,
 };
 
 /**  What a saved session was opened for, so a paused one resumes the same way. */
@@ -306,6 +340,17 @@ export type Workspace = {
 
 /**  A short, path- and shell-safe identifier such as `playbook` or `lauf`. */
 export type WorkspaceId = string;
+
+/**  A worktree, as the sidebar shows it. */
+export type WorktreeInfo = {
+	id: string,
+	projectPath: string,
+	branch: string,
+	/**  Has uncommitted changes (can't be removed until they're committed or discarded). */
+	dirty: boolean,
+	/**  A running session uses it. */
+	inUse: boolean,
+};
 
 /* Tauri Specta runtime */
 async function typedError<T, E>(result: Promise<T>): Promise<{ status: "ok"; data: T } | { status: "error"; error: E }> {

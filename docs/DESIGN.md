@@ -226,3 +226,10 @@ Mike found the first layout clashing: the list sat in a bordered card with a sec
   - Title "Lauf · stoc · Claude Code", with the agent's own message (for example "Claude needs your permission to use Bash"), else "Finished. Your turn." or "Needs you."
   - They're sent only when Mike isn't already looking at that session.
 - **"From your projects" removed** (Mike: too many files). The list is now just Shared, Notes, Private and Assets.
+
+## M5b — Up next and parallel tasks (2026-10-20)
+
+- **Up next** sits under the terminal and is quiet until used. It's a single "+ Up next" text button. Once items exist, a caption reads "Up next · runs when Claude finishes", with numbered rows (tabular figures) that show × on hover.
+- **The add field** is a raised card with a borderless field, a key hint line ("↵ add · ⇧↵ new line · ⌘↵ in parallel · esc cancel"), a secondary **Run in parallel** button and an accent **Add to Up next** button. It never looks like a chat input: no avatar, no send arrow, and it closes after adding.
+- **Parallel sessions** show their branch as a small monospace tag (without "otto/") on the session row.
+- **The project ··· menu** gains "Parallel worktrees". Each one shows why it can't be removed yet ("A session is running in it", "Has uncommitted changes") or that "The branch stays".

@@ -13,6 +13,7 @@
 //! - [`knowledge`]: notes, generated instruction files and project docs (SPEC §7)
 //! - [`scrollback`]: Shell output kept across relaunches
 //! - [`store`]: SQLite app state
+//! - [`worktree`]: parallel tasks in their own git worktree
 
 pub mod agent;
 pub mod agent_events;
@@ -32,5 +33,6 @@ pub mod repo;
 pub mod scrollback;
 pub mod store;
 pub mod workspace;
+pub mod worktree;
 
 pub use app_info::{AppInfo, AppInfoError};

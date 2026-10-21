@@ -238,3 +238,12 @@ Each ADR records the context, the options, the decision and its consequences. Ne
 ### ADR-021 amendment (2026-10-20)
 
 "From your projects" is removed at Mike's request: listing every repo's Markdown flooded Knowledge. The core functions, commands, UI and their tests went with it. Agents still read a repo's own docs when working in it, and Ask can open the workspace's projects.
+
+## ADR-024 — Up next and parallel worktrees
+
+- **Status:** Accepted (2026-10-20, Mike chose the panel and Otto's own folder)
+- **Decision:**
+  - **Queue:** a `queue_items` table (migration 0007). A prompt is sent only after the agent's own "finished" event, via `claim_idle`: one `UPDATE … WHERE status = 'idle'`, so concurrent triggers can't both send. Then `take_next` marks it `sent` in the same statement it's read. The prompt goes in as a bracketed paste with escape characters removed, then Return. A 3-second warm-up protects an agent that's still starting.
+  - **Parallel:** a `worktrees` table plus `sessions.worktree_id`. `git worktree add -b otto/<slug>` runs in the workspace's isolated environment, under `<workspace>/worktrees/<project>/`. The session starts with the prompt as its first argument (prefixed if it begins with "-", so it can't read as an option). Removal refuses dirty or in-use worktrees and keeps the branch.
+  - Every queue and worktree query is scoped to its workspace.
+- **Consequences:** The isolation suite gains `worktrees_keep_their_workspace_identity_and_guardrails` (real git: the commit author, the push guardrail, Playbook refused) and queue checks in `agent_events_only_update_their_own_workspace` (30 tests). Queues need agent hooks, so Shell sessions don't get one.

@@ -4,15 +4,21 @@ import {
   requestPermission,
   sendNotification,
 } from '@tauri-apps/plugin-notification';
+import type { QueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 import { events, type Project, type SessionStatusChanged, type Workspace } from '../bindings';
 import { useSessions } from '../sessions/registry';
+import { queryKeys } from './queries';
 
 /**
  * Listen for what agents report (M5a): update each session's status, and send a macOS
  * notification when one finishes or needs Mike while he's looking elsewhere.
  */
-export function useAgentStatus(workspaces: Workspace[], projects: Project[]) {
+export function useAgentStatus(
+  workspaces: Workspace[],
+  projects: Project[],
+  queryClient: QueryClient,
+) {
   // The listener is registered once; it reads the latest names through this ref.
   const names = useRef({ workspaces, projects });
   useEffect(() => {
@@ -33,11 +39,24 @@ export function useAgentStatus(workspaces: Workspace[], projects: Project[]) {
         if (disposed) unlisten();
         else stop = unlisten;
       });
+    // "Up next" changed (added, removed or sent): refresh that session's list.
+    let stopQueue: (() => void) | undefined;
+    void events.queueChanged
+      .listen(({ payload }) => {
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.queue(payload.workspaceId, payload.sessionId),
+        });
+      })
+      .then((unlisten) => {
+        if (disposed) unlisten();
+        else stopQueue = unlisten;
+      });
     return () => {
       disposed = true;
       stop?.();
+      stopQueue?.();
     };
-  }, []);
+  }, [queryClient]);
 }
 
 async function notify(

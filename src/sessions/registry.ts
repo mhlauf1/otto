@@ -39,6 +39,13 @@ interface SessionsState {
   openAsk: (workspaceId: string, includePrivate: boolean) => Promise<LiveSession>;
   /** Pick up a session that was open when Otto last quit. */
   resume: (workspaceId: string, id: string) => Promise<LiveSession>;
+  /** A parallel task: a new worktree of the project, with an agent started on `prompt`. */
+  startParallel: (
+    workspaceId: string,
+    projectPath: string,
+    agent: AgentKind,
+    prompt: string,
+  ) => Promise<LiveSession>;
   /** Apply a status an agent reported. Returns the session's previous status. */
   setStatus: (id: string, status: SessionStatus) => SessionStatus | undefined;
   close: (id: string) => void;
@@ -140,6 +147,11 @@ export const useSessions = create<SessionsState>((set, get) => {
     resume: (workspaceId, id) =>
       attach(workspaceId, (channel) =>
         commands.resumePausedSession(workspaceId, id, 100, 30, channel),
+      ),
+
+    startParallel: (workspaceId, projectPath, agent, prompt) =>
+      attach(workspaceId, (channel) =>
+        commands.startParallelTask(workspaceId, projectPath, agent, prompt, 100, 30, channel),
       ),
 
     setStatus: (id, status) => {

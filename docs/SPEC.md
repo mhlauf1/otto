@@ -307,7 +307,17 @@ A list (Shared, Notes, Private, Assets) sits beside a reader and editor. The rea
 
 ### 8.2 Queue and parallel work (M5b)
 
-- **Queue:** each session has a queue of tasks marked parallel or sequential. A sequential task starts when the agent reports it finished (8.1). Parallel tasks start new sessions in the same workspace and repo, using git worktrees to avoid clashes.
+- **Up next** (Mike, 2026-10-20): a slim panel under the terminal of a Claude or Codex session.
+  - "+ Up next" opens a small field: ↵ adds, ⇧↵ adds a line, ⌘↵ runs in parallel, and esc cancels.
+  - Waiting prompts are listed and numbered, each with ×.
+  - The panel holds only waiting prompts. The terminal stays the place to talk to the agent.
+- **Sequential:** when the agent reports it finished (8.1), Otto sends the next prompt as a bracketed paste plus Return, after the agent's first 3 seconds.
+  - Never while it works or needs Mike.
+  - Never twice: one database update claims the idle session before anything is sent.
+- **Parallel:** "Run in parallel" makes a git worktree of the project on a new `otto/<task>` branch, inside the workspace's own folder (Mike, 2026-10-20). It starts a new session there with the prompt as its first message.
+  - The session sits under its project with its branch shown.
+  - Worktrees are created and used as the workspace's identity, and are re-verified like projects.
+  - The project's ··· menu lists them. **Remove** is refused while a session runs in one or it has uncommitted changes, and the branch is kept.
 
 ---
 
@@ -392,3 +402,4 @@ Section 4's isolation rules enforce this mapping. Only `mikelauf`, with the play
 - 2026-10-20: Approved by Mike: Section 7 rewritten as Knowledge (ADR-021). Agents get an index of notes rather than every note, About Mike is shared by every workspace, and repo files are never edited. §6.3 item 5 and milestone 4 were updated to match.
 - 2026-10-20: Approved by Mike: M5 is split into 5a and 5b, and sessions come back paused and resume on a click. §8 rewritten as 8.1 and 8.2, with ADR-022 and ADR-023.
 - 2026-10-20: Asked for by Mike: removed "From your projects" from Knowledge (§7.3, §7.4, §7.6). Project docs stay in their repos; Ask can still open them.
+- 2026-10-20: Approved by Mike for M5b: an "Up next" panel under the terminal, and worktrees inside Otto's data folder. §8.2 detailed, ADR-024.

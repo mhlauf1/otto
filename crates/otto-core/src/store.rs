@@ -69,7 +69,31 @@ pub struct SavedSession {
     pub cli_session_id: Option<String>,
     pub status: SessionStatus,
     pub last_active_at: String,
+    /// Set when the session runs in a parallel task's worktree (M5b).
+    pub worktree_id: Option<String>,
 }
+
+/// A prompt waiting to be sent when its session's agent finishes (M5b).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct QueueItem {
+    pub id: String,
+    pub session_id: String,
+    pub prompt: String,
+}
+
+/// A worktree Otto made for a parallel task.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct Worktree {
+    pub id: String,
+    pub project_path: String,
+    pub path: String,
+    pub branch: String,
+}
+
+/// Long enough for a detailed dictated prompt; short enough to catch a paste gone wrong.
+const MAX_PROMPT_CHARS: usize = 20_000;
 
 fn enum_str<T: serde::Serialize>(value: T) -> String {
     serde_json::to_value(value)
@@ -483,8 +507,8 @@ impl Store {
     /// Fails on database errors.
     pub async fn save_session(&self, session: &SavedSession) -> Result<(), StoreError> {
         sqlx::query(
-            "INSERT INTO sessions (id, workspace_id, agent, project_path, title, kind, cli_session_id, status)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+            "INSERT INTO sessions (id, workspace_id, agent, project_path, title, kind, cli_session_id, status, worktree_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
              ON CONFLICT (id) DO UPDATE SET state = 'open', closed_at = NULL, status = ?8,
                title = ?5, last_active_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
              WHERE sessions.workspace_id = ?2",
@@ -497,6 +521,7 @@ impl Store {
         .bind(enum_str(session.kind))
         .bind(&session.cli_session_id)
         .bind(enum_str(session.status))
+        .bind(&session.worktree_id)
         .execute(&self.pool)
         .await?;
         Ok(())
@@ -512,7 +537,7 @@ impl Store {
         id: &str,
     ) -> Result<Option<SavedSession>, StoreError> {
         let row = sqlx::query(
-            "SELECT id, workspace_id, agent, project_path, title, kind, cli_session_id, status, last_active_at
+            "SELECT id, workspace_id, agent, project_path, title, kind, cli_session_id, status, last_active_at, worktree_id
              FROM sessions WHERE id = ?1 AND workspace_id = ?2",
         )
         .bind(id)
@@ -531,7 +556,7 @@ impl Store {
         workspace: &WorkspaceId,
     ) -> Result<Vec<SavedSession>, StoreError> {
         let rows = sqlx::query(
-            "SELECT id, workspace_id, agent, project_path, title, kind, cli_session_id, status, last_active_at
+            "SELECT id, workspace_id, agent, project_path, title, kind, cli_session_id, status, last_active_at, worktree_id
              FROM sessions WHERE workspace_id = ?1 AND state = 'open' ORDER BY created_at",
         )
         .bind(workspace.as_str())
@@ -556,6 +581,24 @@ impl Store {
              WHERE id = ?2 AND workspace_id = ?3 AND state = 'open'",
         )
         .bind(enum_str(status))
+        .bind(id)
+        .bind(workspace.as_str())
+        .execute(&self.pool)
+        .await?;
+        Ok(done.rows_affected() > 0)
+    }
+
+    /// Claim an idle session for sending it a prompt: flips it to `running` only if it was
+    /// `idle`, in one statement, so two senders can never both send. Returns whether this
+    /// caller got it.
+    ///
+    /// # Errors
+    /// Fails on database errors.
+    pub async fn claim_idle(&self, workspace: &WorkspaceId, id: &str) -> Result<bool, StoreError> {
+        let done = sqlx::query(
+            "UPDATE sessions SET status = 'running', last_active_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+             WHERE id = ?1 AND workspace_id = ?2 AND state = 'open' AND status = 'idle'",
+        )
         .bind(id)
         .bind(workspace.as_str())
         .execute(&self.pool)
@@ -614,6 +657,205 @@ impl Store {
         .execute(&self.pool)
         .await?;
         Ok(done.rows_affected())
+    }
+
+    /// Add a prompt to the end of an open session's queue. Refuses a session that isn't
+    /// one of `workspace`'s open sessions.
+    ///
+    /// # Errors
+    /// Rejects an empty or overlong prompt or a foreign session; fails on database errors.
+    pub async fn enqueue(
+        &self,
+        workspace: &WorkspaceId,
+        session_id: &str,
+        prompt: &str,
+    ) -> Result<QueueItem, StoreError> {
+        let prompt = prompt.trim();
+        if prompt.is_empty() {
+            return Err(StoreError::Rejected("Write the prompt first.".into()));
+        }
+        if prompt.chars().count() > MAX_PROMPT_CHARS {
+            return Err(StoreError::Rejected(format!(
+                "That prompt is over {MAX_PROMPT_CHARS} characters."
+            )));
+        }
+        let id = uuid::Uuid::new_v4().to_string();
+        let done = sqlx::query(
+            "INSERT INTO queue_items (id, workspace_id, session_id, prompt, position)
+             SELECT ?1, ?2, ?3, ?4,
+               (SELECT COALESCE(MAX(position), -1) + 1 FROM queue_items WHERE session_id = ?3)
+             WHERE EXISTS (SELECT 1 FROM sessions
+                           WHERE id = ?3 AND workspace_id = ?2 AND state = 'open')",
+        )
+        .bind(&id)
+        .bind(workspace.as_str())
+        .bind(session_id)
+        .bind(prompt)
+        .execute(&self.pool)
+        .await?;
+        if done.rows_affected() == 0 {
+            return Err(not_this_workspace("session"));
+        }
+        Ok(QueueItem {
+            id,
+            session_id: session_id.to_owned(),
+            prompt: prompt.to_owned(),
+        })
+    }
+
+    /// The prompts still waiting for a session, in order.
+    ///
+    /// # Errors
+    /// Fails on database errors.
+    pub async fn queued(
+        &self,
+        workspace: &WorkspaceId,
+        session_id: &str,
+    ) -> Result<Vec<QueueItem>, StoreError> {
+        let rows = sqlx::query(
+            "SELECT id, session_id, prompt FROM queue_items
+             WHERE workspace_id = ?1 AND session_id = ?2 AND state = 'queued' ORDER BY position",
+        )
+        .bind(workspace.as_str())
+        .bind(session_id)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows
+            .iter()
+            .map(|r| QueueItem {
+                id: r.get("id"),
+                session_id: r.get("session_id"),
+                prompt: r.get("prompt"),
+            })
+            .collect())
+    }
+
+    /// Drop a waiting prompt. Returns the session it was queued for.
+    ///
+    /// # Errors
+    /// Rejects an item from another workspace (or already sent); fails on database errors.
+    pub async fn unqueue(
+        &self,
+        workspace: &WorkspaceId,
+        item_id: &str,
+    ) -> Result<String, StoreError> {
+        let session: Option<String> = sqlx::query_scalar(
+            "DELETE FROM queue_items WHERE id = ?1 AND workspace_id = ?2 AND state = 'queued'
+             RETURNING session_id",
+        )
+        .bind(item_id)
+        .bind(workspace.as_str())
+        .fetch_optional(&self.pool)
+        .await?;
+        session.ok_or_else(|| not_this_workspace("queued prompt"))
+    }
+
+    /// Take the next waiting prompt for a session and mark it sent, atomically, so a prompt
+    /// is never sent twice.
+    ///
+    /// # Errors
+    /// Fails on database errors.
+    pub async fn take_next(
+        &self,
+        workspace: &WorkspaceId,
+        session_id: &str,
+    ) -> Result<Option<QueueItem>, StoreError> {
+        let row = sqlx::query(
+            "UPDATE queue_items SET state = 'sent', sent_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+             WHERE id = (SELECT id FROM queue_items
+                         WHERE workspace_id = ?1 AND session_id = ?2 AND state = 'queued'
+                         ORDER BY position LIMIT 1)
+             RETURNING id, session_id, prompt",
+        )
+        .bind(workspace.as_str())
+        .bind(session_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(|r| QueueItem {
+            id: r.get("id"),
+            session_id: r.get("session_id"),
+            prompt: r.get("prompt"),
+        }))
+    }
+
+    /// # Errors
+    /// Fails on database errors, including a path that already has a worktree.
+    pub async fn add_worktree(
+        &self,
+        workspace: &WorkspaceId,
+        worktree: &Worktree,
+    ) -> Result<(), StoreError> {
+        sqlx::query(
+            "INSERT INTO worktrees (id, workspace_id, project_path, path, branch)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+        )
+        .bind(&worktree.id)
+        .bind(workspace.as_str())
+        .bind(&worktree.project_path)
+        .bind(&worktree.path)
+        .bind(&worktree.branch)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    /// One of `workspace`'s worktrees; another workspace's ID finds nothing.
+    ///
+    /// # Errors
+    /// Fails on database errors.
+    pub async fn worktree(
+        &self,
+        workspace: &WorkspaceId,
+        id: &str,
+    ) -> Result<Option<Worktree>, StoreError> {
+        let row = sqlx::query(
+            "SELECT id, project_path, path, branch FROM worktrees WHERE id = ?1 AND workspace_id = ?2",
+        )
+        .bind(id)
+        .bind(workspace.as_str())
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(|r| Worktree {
+            id: r.get("id"),
+            project_path: r.get("project_path"),
+            path: r.get("path"),
+            branch: r.get("branch"),
+        }))
+    }
+
+    /// # Errors
+    /// Fails on database errors.
+    pub async fn worktrees(&self, workspace: &WorkspaceId) -> Result<Vec<Worktree>, StoreError> {
+        let rows = sqlx::query(
+            "SELECT id, project_path, path, branch FROM worktrees WHERE workspace_id = ?1 ORDER BY created_at",
+        )
+        .bind(workspace.as_str())
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows
+            .iter()
+            .map(|r| Worktree {
+                id: r.get("id"),
+                project_path: r.get("project_path"),
+                path: r.get("path"),
+                branch: r.get("branch"),
+            })
+            .collect())
+    }
+
+    /// # Errors
+    /// Fails on database errors.
+    pub async fn forget_worktree(
+        &self,
+        workspace: &WorkspaceId,
+        id: &str,
+    ) -> Result<(), StoreError> {
+        sqlx::query("DELETE FROM worktrees WHERE id = ?1 AND workspace_id = ?2")
+            .bind(id)
+            .bind(workspace.as_str())
+            .execute(&self.pool)
+            .await?;
+        Ok(())
     }
 
     /// The most recent audit detail of `kind` for a workspace, to skip logging repeats.
@@ -676,6 +918,7 @@ fn saved_session(r: &sqlx::sqlite::SqliteRow) -> Result<SavedSession, StoreError
         cli_session_id: r.get("cli_session_id"),
         status: enum_parse(r.get("status"))?,
         last_active_at: r.get("last_active_at"),
+        worktree_id: r.get("worktree_id"),
     })
 }
 
@@ -972,7 +1215,56 @@ mod tests {
             cli_session_id: None,
             status: SessionStatus::Idle,
             last_active_at: String::new(),
+            worktree_id: None,
         }
+    }
+
+    #[tokio::test]
+    async fn queued_prompts_go_out_in_order_exactly_once() {
+        let (_dir, store) = temp_store().await;
+        store.seed_defaults().await.unwrap();
+        store.save_session(&saved("s", "lauf")).await.unwrap();
+        let first = store
+            .enqueue(&ws("lauf"), "s", "  update the footer ")
+            .await
+            .unwrap();
+        assert_eq!(first.prompt, "update the footer");
+        store
+            .enqueue(&ws("lauf"), "s", "run the tests")
+            .await
+            .unwrap();
+        let third = store.enqueue(&ws("lauf"), "s", "open a PR").await.unwrap();
+        assert!(store.enqueue(&ws("lauf"), "s", "   ").await.is_err());
+        assert_eq!(store.unqueue(&ws("lauf"), &third.id).await.unwrap(), "s");
+
+        let next = store.take_next(&ws("lauf"), "s").await.unwrap().unwrap();
+        assert_eq!(next.prompt, "update the footer");
+        let next = store.take_next(&ws("lauf"), "s").await.unwrap().unwrap();
+        assert_eq!(next.prompt, "run the tests");
+        assert_eq!(store.take_next(&ws("lauf"), "s").await.unwrap(), None);
+        assert_eq!(store.queued(&ws("lauf"), "s").await.unwrap(), []);
+    }
+
+    #[tokio::test]
+    async fn only_one_sender_can_claim_an_idle_session() {
+        let (_dir, store) = temp_store().await;
+        store.seed_defaults().await.unwrap();
+        store.save_session(&saved("s", "lauf")).await.unwrap();
+        assert!(store.claim_idle(&ws("lauf"), "s").await.unwrap());
+        assert!(!store.claim_idle(&ws("lauf"), "s").await.unwrap());
+        assert!(!store.claim_idle(&ws("playbook"), "s").await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn closed_sessions_take_no_new_prompts() {
+        let (_dir, store) = temp_store().await;
+        store.seed_defaults().await.unwrap();
+        store.save_session(&saved("s", "lauf")).await.unwrap();
+        store.close_saved_session("s").await.unwrap();
+        assert!(matches!(
+            store.enqueue(&ws("lauf"), "s", "hi").await,
+            Err(StoreError::Rejected(_))
+        ));
     }
 
     #[tokio::test]

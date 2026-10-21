@@ -219,3 +219,19 @@ Instead of guessing from terminal text whether Claude is working, Otto asks Clau
 ### Not counting "quit" as "closed"
 
 When Otto quits, every terminal it started ends too. If Otto treated that like you closing them, nothing would come back. So Otto sets a "quitting" flag first, and sessions that end while it's set stay remembered, and come back paused.
+
+---
+
+## Chapter 7 — Up next and parallel tasks (M5b)
+
+### Git worktrees
+
+A repo normally has one working folder. `git worktree add` gives it a second (or tenth) folder, each on its own branch, all sharing the same history and settings. Two agents can then change the same project at once without touching each other's files. Otto puts these folders in its own data folder and names the branches `otto/<task>`.
+
+### Why "claim, then send"
+
+The "finished" event and Mike clicking "Add" can arrive in the same instant. If both checked "is it idle?" and then sent, the agent would get two prompts at once. Otto asks the database to flip the session from idle to running in one statement. Only one caller can win that, and only the winner sends.
+
+### Bracketed paste, again
+
+Otto types a queued prompt the way a paste arrives: wrapped in invisible start and end markers, so a multi-line prompt lands as one message, then Return. Escape characters are stripped first, so a prompt can never end the paste early.

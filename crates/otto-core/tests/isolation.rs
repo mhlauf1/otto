@@ -1079,6 +1079,7 @@ async fn agent_events_only_update_their_own_workspace() {
             cli_session_id: None,
             status: SessionStatus::Idle,
             last_active_at: String::new(),
+            worktree_id: None,
         })
         .await
         .unwrap();
@@ -1098,6 +1099,27 @@ async fn agent_events_only_update_their_own_workspace() {
             .unwrap();
         assert!(!applied, "Lauf's inbox must not reach a Playbook session");
     }
+    // Nor can Lauf queue prompts into it, drop its prompts, or take them.
+    let queued = store
+        .enqueue(&world.playbook.id, pb_session, "playbook-only task")
+        .await
+        .unwrap();
+    assert!(
+        store
+            .enqueue(&world.lauf.id, pb_session, "sneaky")
+            .await
+            .is_err()
+    );
+    assert!(store.unqueue(&world.lauf.id, &queued.id).await.is_err());
+    assert_eq!(
+        store.take_next(&world.lauf.id, pb_session).await.unwrap(),
+        None
+    );
+    assert_eq!(
+        store.queued(&world.playbook.id, pb_session).await.unwrap(),
+        [queued]
+    );
+
     let pb_now = store
         .session(&world.playbook.id, pb_session)
         .await
@@ -1111,4 +1133,81 @@ async fn agent_events_only_update_their_own_workspace() {
             .unwrap()
             .is_none()
     );
+}
+
+/// M5b: a parallel task's worktree is still the workspace's repo. It commits as that
+/// workspace, its pushes pass the same guardrails, and another workspace can neither open
+/// it nor push from it.
+#[test]
+fn worktrees_keep_their_workspace_identity_and_guardrails() {
+    use otto_core::worktree;
+
+    let w = World::new();
+    let env = w.env(&w.lauf);
+    let (work, bare) = w.repo(&w.lauf, "mhlauf1");
+    let made = worktree::create(&env, &w.layout(&w.lauf), &work, "Update the footer copy").unwrap();
+    assert_eq!(made.branch, "otto/update-the-footer-copy");
+    assert!(made.path.starts_with(worktree::root(&w.layout(&w.lauf))));
+    // A second task with the same words gets its own branch.
+    let again =
+        worktree::create(&env, &w.layout(&w.lauf), &work, "update the footer copy").unwrap();
+    assert_eq!(again.branch, "otto/update-the-footer-copy-2");
+
+    // It opens in Lauf, and is refused in Playbook (the remote is Lauf's).
+    verify_repo(
+        &w.lauf,
+        &w.layout(&w.lauf),
+        &env,
+        &made.path,
+        RemotePolicy::RequireGithubRemote,
+    )
+    .unwrap();
+    let pb_env = w.env(&w.playbook);
+    assert!(
+        verify_repo(
+            &w.playbook,
+            &w.layout(&w.playbook),
+            &pb_env,
+            &made.path,
+            RemotePolicy::RequireGithubRemote
+        )
+        .is_err()
+    );
+
+    // Commits there are Lauf's, and Lauf can push the branch.
+    fs::write(made.path.join("footer.txt"), "new\n").unwrap();
+    assert!(worktree::is_dirty(&env, &made.path).unwrap());
+    git_ok(&env, &made.path, &["add", "footer.txt"]);
+    git_ok(&env, &made.path, &["commit", "-q", "-m", "footer"]);
+    let author = git_ok(&env, &made.path, &["log", "-1", "--format=%ae"]);
+    assert_eq!(
+        String::from_utf8_lossy(&author.stdout).trim(),
+        "mhlauf1@gmail.com"
+    );
+    git_ok(
+        &env,
+        &made.path,
+        &["push", "-q", "origin", "HEAD:refs/heads/otto/footer"],
+    );
+    assert!(has_branch(&bare, &env));
+
+    // Playbook's identity can't push from Lauf's worktree.
+    let out = git(
+        &pb_env,
+        &made.path,
+        &["push", "-q", "origin", "HEAD:refs/heads/pb"],
+    );
+    assert!(!out.status.success(), "{}", stderr(&out));
+
+    // Removing refuses uncommitted work, then works once it's clean; the branch stays.
+    fs::write(made.path.join("scratch.txt"), "wip\n").unwrap();
+    assert!(matches!(
+        worktree::remove(&env, &work, &made.path),
+        Err(worktree::WorktreeError::Dirty)
+    ));
+    fs::remove_file(made.path.join("scratch.txt")).unwrap();
+    worktree::remove(&env, &work, &made.path).unwrap();
+    assert!(!made.path.exists());
+    let branches = git_ok(&env, &work, &["branch", "--list", "otto/*"]);
+    assert!(String::from_utf8_lossy(&branches.stdout).contains("otto/update-the-footer-copy"));
 }

@@ -151,6 +151,7 @@ export const PREVIEW_PAUSED: Record<string, SavedSession[] | undefined> = {
       cliSessionId: null,
       status: 'waiting',
       lastActiveAt: '2026-10-20T21:39:00.000Z',
+      worktreeId: null,
     },
   ],
 };

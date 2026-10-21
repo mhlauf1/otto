@@ -10,6 +10,7 @@ import { ImportProjects } from '../projects/ImportProjects';
 import { sessionLabels } from '../sessions/labels';
 import { SessionError, useSessions } from '../sessions/registry';
 import { TerminalView } from '../sessions/TerminalView';
+import { UpNext } from '../sessions/UpNext';
 import { ClaudeSetup } from '../setup/ClaudeSetup';
 import { Sidebar } from '../sidebar/Sidebar';
 import { useWorkspaceUi, type WorkspacePage } from '../state/workspace';
@@ -66,7 +67,8 @@ export function App() {
   const doctor = useDoctor(active?.id);
   const queryClient = useQueryClient();
 
-  const { sessions, activeByWorkspace, open, openAsk, resume, close, select } = useSessions();
+  const { sessions, activeByWorkspace, open, openAsk, resume, startParallel, close, select } =
+    useSessions();
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const activeSessionId = active ? activeByWorkspace[active.id] : undefined;
@@ -89,9 +91,10 @@ export function App() {
   useEffect(() => {
     void queryClient.invalidateQueries({ queryKey: ['past'] });
     void queryClient.invalidateQueries({ queryKey: ['paused'] });
+    void queryClient.invalidateQueries({ queryKey: ['worktrees'] });
   }, [queryClient, sessionCount]);
 
-  useAgentStatus(list, projects.data ?? []);
+  useAgentStatus(list, projects.data ?? [], queryClient);
 
   /**
    * Every caller says where the session runs: `projectPath`, or `undefined` for General.
@@ -399,6 +402,25 @@ export function App() {
           {sessions.map((s) => (
             <TerminalView key={s.info.id} session={s} visible={s.info.id === activeSessionId} />
           ))}
+          {activeSession &&
+          activeSession.info.agent !== 'shell' &&
+          !activeSession.info.signIn &&
+          activeSession.exit === undefined ? (
+            <UpNext
+              key={activeSession.info.id}
+              workspaceId={active.id}
+              session={activeSession}
+              onParallel={
+                activeSession.info.projectPath
+                  ? async (prompt) => {
+                      const repo = activeSession.info.projectPath;
+                      if (!repo) return;
+                      await startParallel(active.id, repo, activeSession.info.agent, prompt);
+                    }
+                  : undefined
+              }
+            />
+          ) : null}
         </div>
 
         {activeSessionId === undefined && page === 'overview' ? (
