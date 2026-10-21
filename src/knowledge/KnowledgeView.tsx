@@ -21,6 +21,13 @@ type Selection =
   | { kind: 'note'; area: Area; path: string }
   | { kind: 'doc'; projectPath: string; projectName: string; path: string };
 
+const AREA_LABEL: Record<Area, string> = {
+  global: 'Shared',
+  notes: 'Notes',
+  private: 'Private',
+  assets: 'Assets',
+};
+
 const AREA_BADGE: Record<Area, string> = {
   global: 'Shared by every workspace',
   notes: 'Agents read this',
@@ -115,58 +122,34 @@ export function KnowledgeView({ workspace, onAsk }: KnowledgeViewProps) {
 
   return (
     <section className={styles.page} aria-labelledby="knowledge-title">
-      <header className={styles.header}>
-        <div className={styles.heading}>
-          <h1 id="knowledge-title" className={styles.title}>
-            Knowledge
-          </h1>
-          <p className={styles.subtitle}>
-            What {workspace.name}’s agents know. Kept on this Mac, never in a repo.
-          </p>
-        </div>
-        <label className={styles.check}>
-          <input
-            type="checkbox"
-            checked={includePrivate}
-            onChange={(e) => {
-              setIncludePrivate(e.target.checked);
-            }}
-          />
-          Include private
-        </label>
-        <button
-          type="button"
-          className={styles.ask}
-          title="Open Claude Code over this workspace’s notes and projects"
-          onClick={() => {
-            onAsk(includePrivate);
-          }}
-        >
-          Ask {workspace.name}
-        </button>
-      </header>
-
-      {error ? (
-        <p className={styles.error} role="alert">
-          {error}
-        </p>
-      ) : null}
-
-      <div className={styles.split}>
-        <nav className={styles.list} aria-label={`${workspace.name} knowledge`}>
+      <aside className={styles.column}>
+        <header className={styles.columnHeader}>
+          <div className={styles.heading}>
+            <h1 id="knowledge-title" className={styles.title}>
+              Knowledge
+            </h1>
+            <p className={styles.subtitle}>On this Mac, never in a repo.</p>
+          </div>
           <button
             type="button"
-            className={styles.addRow}
+            className={styles.newNote}
+            aria-label="New note"
+            title="New note"
             onClick={() => {
               setCreating('notes');
             }}
           >
-            <span className={styles.addIcon} aria-hidden>
-              +
-            </span>
-            New note
+            +
           </button>
+        </header>
 
+        {error ? (
+          <p className={styles.error} role="alert">
+            {error}
+          </p>
+        ) : null}
+
+        <nav className={styles.list} aria-label={`${workspace.name} knowledge`}>
           <ListSection label="Shared">
             <ul className={styles.items}>{inArea('global').map(noteRow)}</ul>
           </ListSection>
@@ -237,24 +220,47 @@ export function KnowledgeView({ workspace, onAsk }: KnowledgeViewProps) {
           </ListSection>
         </nav>
 
-        <article className={styles.reader}>
-          {selection.kind === 'doc' ? (
-            <DocReader key={`${selection.projectPath}:${selection.path}`} ws={ws} {...selection} />
-          ) : selection.area === 'assets' ? (
-            <AssetViewer key={selection.path} ws={ws} path={selection.path} />
-          ) : (
-            <NoteEditor
-              key={`${selection.area}:${selection.path}`}
-              ws={ws}
-              area={selection.area}
-              path={selection.path}
-              title={selectedEntry?.title ?? selection.path.replace(/\.md$/, '')}
-              startEditing={startEditing}
-              onSaved={refresh}
+        <footer className={styles.askBar}>
+          <label className={styles.check}>
+            <input
+              type="checkbox"
+              checked={includePrivate}
+              onChange={(e) => {
+                setIncludePrivate(e.target.checked);
+              }}
             />
-          )}
-        </article>
-      </div>
+            Include private notes
+          </label>
+          <button
+            type="button"
+            className={styles.ask}
+            title="Open Claude Code over this workspace’s notes and projects"
+            onClick={() => {
+              onAsk(includePrivate);
+            }}
+          >
+            Ask {workspace.name}
+          </button>
+        </footer>
+      </aside>
+
+      <article className={styles.reader}>
+        {selection.kind === 'doc' ? (
+          <DocReader key={`${selection.projectPath}:${selection.path}`} ws={ws} {...selection} />
+        ) : selection.area === 'assets' ? (
+          <AssetViewer key={selection.path} ws={ws} path={selection.path} />
+        ) : (
+          <NoteEditor
+            key={`${selection.area}:${selection.path}`}
+            ws={ws}
+            area={selection.area}
+            path={selection.path}
+            title={selectedEntry?.title ?? selection.path.replace(/\.md$/, '')}
+            startEditing={startEditing}
+            onSaved={refresh}
+          />
+        )}
+      </article>
 
       {creating ? (
         <NameDialog
@@ -382,7 +388,13 @@ function NoteEditor({
   return (
     <>
       <div className={styles.readerHeader}>
-        <h2 className={styles.readerTitle}>{title}</h2>
+        <h2 className={styles.crumbs}>
+          <span className={styles.crumbArea}>{AREA_LABEL[area]}</span>
+          <span className={styles.crumbSep} aria-hidden>
+            /
+          </span>
+          {title}
+        </h2>
         <span className={styles.badge} data-area={area}>
           {AREA_BADGE[area]}
         </span>
@@ -462,8 +474,12 @@ function DocReader({
   return (
     <>
       <div className={styles.readerHeader}>
-        <h2 className={styles.readerTitle}>
-          {projectName} · {path}
+        <h2 className={styles.crumbs}>
+          <span className={styles.crumbArea}>{projectName}</span>
+          <span className={styles.crumbSep} aria-hidden>
+            /
+          </span>
+          {path}
         </h2>
         <span className={styles.badge}>Read-only, from the repo</span>
       </div>
@@ -487,7 +503,13 @@ function AssetViewer({ ws, path }: { ws: string; path: string }) {
   return (
     <>
       <div className={styles.readerHeader}>
-        <h2 className={styles.readerTitle}>{path}</h2>
+        <h2 className={styles.crumbs}>
+          <span className={styles.crumbArea}>Assets</span>
+          <span className={styles.crumbSep} aria-hidden>
+            /
+          </span>
+          {path}
+        </h2>
         <span className={styles.badge}>Asset</span>
       </div>
       <div className={styles.readerBody}>

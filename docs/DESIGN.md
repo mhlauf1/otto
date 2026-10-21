@@ -205,3 +205,12 @@ Mike still found the composer confusing after the M3 revision, and couldn't tell
 ### Design QA
 
 `pnpm test:e2e` writes `knowledge-{light,dark}.png` and waits for the diagram to draw. The first pass matched Mermaid's off-screen measuring element, so the screenshot caught "Drawing diagram…". The test now waits for the SVG inside the reader.
+
+### Rework after Mike's first look (2026-10-20)
+
+Mike found the first layout clashing: the list sat in a bordered card with a second grey inside the page, and snippets ran out of the column.
+
+- **One flat surface.** There's no card: the list column and the reader sit directly on the page, split by a single hairline (Evernote, Obvious).
+- **The column carries its own header.** "Knowledge" with "On this Mac, never in a repo." and a bordered "+" for a new note. **Ask** and "Include private notes" moved to the foot of the column, like a composer.
+- **Rows** show the title on one line and a snippet clamped to two lines, clipped inside the column (`min-width: 0` all the way down).
+- **The reader header** is a breadcrumb ("Notes / Clients") plus the badge. The note's own title is the one big heading.

@@ -1,19 +1,30 @@
-/* Knowledge: a list beside a reader (Obvious, hilos, Cofounder references in DESIGN.md). */
+/* Knowledge: one flat surface, a list column and a reader split by a hairline
+   (Evernote, Obvious, hilos references in DESIGN.md). No card, no second grey. */
 
 .page {
-  display: flex;
+  display: grid;
   flex: 1;
-  flex-direction: column;
-  gap: var(--otto-space-4);
+  grid-template-columns: 280px minmax(0, 1fr);
   min-height: 0;
-  padding: var(--otto-space-4) var(--otto-space-6) var(--otto-space-6);
+  border-top: 1px solid var(--otto-color-border-subtle);
   color: var(--otto-color-text-primary);
 }
 
-.header {
+/* ── List column ────────────────────────────────────────────────────── */
+
+.column {
   display: flex;
-  align-items: center;
-  gap: var(--otto-space-4);
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  border-right: 1px solid var(--otto-color-border-subtle);
+}
+
+.columnHeader {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--otto-space-2);
+  padding: var(--otto-space-4) var(--otto-space-3) var(--otto-space-2) var(--otto-space-4);
 }
 
 .heading {
@@ -23,76 +34,53 @@
 
 .title {
   margin: 0;
-  font-size: var(--otto-type-title1-size);
-  line-height: var(--otto-type-title1-line);
-  font-weight: var(--otto-type-title1-weight);
-  letter-spacing: var(--otto-type-title1-tracking);
+  font-size: var(--otto-type-title2-size);
+  line-height: var(--otto-type-title2-line);
+  font-weight: var(--otto-type-title2-weight);
+  letter-spacing: var(--otto-type-title2-tracking);
 }
 
 .subtitle {
-  margin: var(--otto-space-0-5) 0 0;
-  color: var(--otto-color-text-secondary);
-}
-
-.check {
-  display: flex;
-  align-items: center;
-  gap: var(--otto-space-1-5);
-  color: var(--otto-color-text-secondary);
-  font-size: var(--otto-type-footnote-size);
-}
-
-.ask {
-  padding: var(--otto-space-1-5) var(--otto-space-4);
-  border: 0;
-  border-radius: var(--otto-radius-md);
-  background: var(--otto-accent);
-  color: var(--otto-color-text-on-accent);
-  font-weight: var(--otto-type-headline-weight);
-}
-
-.ask:hover {
-  box-shadow: var(--otto-shadow-focus);
-}
-
-.error {
   margin: 0;
-  padding: var(--otto-space-2) var(--otto-space-3);
-  border-radius: var(--otto-radius-md);
-  background: var(--otto-color-fill-hover);
-  color: var(--otto-color-danger);
-  font-size: var(--otto-type-footnote-size);
-}
-
-.muted {
   color: var(--otto-color-text-tertiary);
+  font-size: var(--otto-type-footnote-size);
+  line-height: var(--otto-type-footnote-line);
 }
 
-.split {
+.newNote {
   display: grid;
-  flex: 1;
-  grid-template-columns: 260px minmax(0, 1fr);
-  min-height: 0;
+  flex-shrink: 0;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
   border: 1px solid var(--otto-color-border-subtle);
-  border-radius: var(--otto-radius-lg);
-  background: var(--otto-color-surface-raised);
-  overflow: hidden;
+  border-radius: var(--otto-radius-md);
+  background: transparent;
+  color: var(--otto-color-text-secondary);
+  font-size: var(--otto-type-title3-size);
 }
 
-/* ── List ───────────────────────────────────────────────────────────── */
+.newNote:hover {
+  background: var(--otto-color-fill-hover);
+  color: var(--otto-color-text-primary);
+}
 
 .list {
   display: flex;
+  flex: 1;
   flex-direction: column;
-  gap: var(--otto-space-3);
-  padding: var(--otto-space-3) var(--otto-space-2);
-  border-right: 1px solid var(--otto-color-border-subtle);
-  overflow-y: auto;
+  gap: var(--otto-space-4);
+  min-width: 0;
+  min-height: 0;
+  padding: var(--otto-space-2) var(--otto-space-2) var(--otto-space-4);
+  overflow: hidden auto;
 }
 
 .section {
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
 .sectionHeader {
@@ -141,21 +129,25 @@
   display: flex;
   flex-direction: column;
   gap: var(--otto-space-0-5);
+  min-width: 0;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
+/* Title plus a two-line snippet, always clipped inside the column. */
 .item {
   display: flex;
   flex-direction: column;
   gap: var(--otto-space-0-5);
   width: 100%;
-  padding: var(--otto-space-1-5) var(--otto-space-2);
+  min-width: 0;
+  padding: var(--otto-space-2);
   border: 0;
-  border-radius: var(--otto-radius-sm);
+  border-radius: var(--otto-radius-md);
   background: transparent;
   text-align: left;
+  overflow: hidden;
 }
 
 .item:hover {
@@ -170,49 +162,32 @@
   display: flex;
   align-items: center;
   gap: var(--otto-space-1-5);
-  font-weight: var(--otto-type-headline-weight);
-}
-
-.itemSummary {
+  min-width: 0;
   overflow: hidden;
-  color: var(--otto-color-text-tertiary);
-  font-size: var(--otto-type-footnote-size);
+  font-weight: var(--otto-type-headline-weight);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.itemSummary {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--otto-color-text-tertiary);
+  font-size: var(--otto-type-footnote-size);
+  line-height: var(--otto-type-footnote-line);
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
 .lock {
   display: inline-grid;
+  flex-shrink: 0;
   color: var(--otto-color-text-tertiary);
-}
-
-.addRow {
-  display: flex;
-  align-items: center;
-  gap: var(--otto-space-0-5);
-  height: 28px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--otto-radius-sm);
-  background: transparent;
-  color: var(--otto-color-text-secondary);
-  text-align: left;
-}
-
-.addRow:hover {
-  background: var(--otto-color-fill-hover);
-  color: var(--otto-color-text-primary);
-}
-
-.addIcon {
-  display: grid;
-  place-items: center;
-  width: 20px;
-  color: var(--otto-color-text-tertiary);
-  font-size: var(--otto-type-callout-size);
 }
 
 .project {
+  min-width: 0;
   margin-bottom: var(--otto-space-1);
 }
 
@@ -220,7 +195,57 @@
   padding: var(--otto-space-1) var(--otto-space-2);
   color: var(--otto-color-text-secondary);
   font-size: var(--otto-type-footnote-size);
+  font-weight: var(--otto-type-headline-weight);
+  list-style: none;
   cursor: default;
+}
+
+.projectName::-webkit-details-marker {
+  display: none;
+}
+
+/* Ask sits at the foot of the list, like a composer. */
+.askBar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--otto-space-2);
+  padding: var(--otto-space-3);
+  border-top: 1px solid var(--otto-color-border-subtle);
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: var(--otto-space-1-5);
+  color: var(--otto-color-text-secondary);
+  font-size: var(--otto-type-footnote-size);
+}
+
+.ask {
+  width: 100%;
+  padding: var(--otto-space-1-5) var(--otto-space-4);
+  border: 0;
+  border-radius: var(--otto-radius-md);
+  background: var(--otto-accent);
+  color: var(--otto-color-text-on-accent);
+  font-weight: var(--otto-type-headline-weight);
+}
+
+.ask:hover {
+  box-shadow: var(--otto-shadow-focus);
+}
+
+.error {
+  margin: 0 var(--otto-space-3) var(--otto-space-2);
+  padding: var(--otto-space-2) var(--otto-space-3);
+  border-radius: var(--otto-radius-md);
+  background: var(--otto-color-fill-hover);
+  color: var(--otto-color-danger);
+  font-size: var(--otto-type-footnote-size);
+}
+
+.muted {
+  color: var(--otto-color-text-tertiary);
 }
 
 /* ── Reader ─────────────────────────────────────────────────────────── */
@@ -236,18 +261,28 @@
   display: flex;
   align-items: center;
   gap: var(--otto-space-3);
-  padding: var(--otto-space-3) var(--otto-space-6);
-  border-bottom: 1px solid var(--otto-color-border-subtle);
+  min-height: 48px;
+  padding: var(--otto-space-2) var(--otto-space-6);
 }
 
-.readerTitle {
+/* "Notes / Clients": where you are; the note's own title is the big heading below. */
+.crumbs {
+  display: flex;
+  align-items: baseline;
+  gap: var(--otto-space-1-5);
+  min-width: 0;
   overflow: hidden;
   margin: 0;
-  font-size: var(--otto-type-title3-size);
-  line-height: var(--otto-type-title3-line);
-  font-weight: var(--otto-type-title3-weight);
+  font-size: var(--otto-type-body-size);
+  font-weight: var(--otto-type-headline-weight);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.crumbArea,
+.crumbSep {
+  color: var(--otto-color-text-tertiary);
+  font-weight: var(--otto-type-body-weight);
 }
 
 .badge {
@@ -299,14 +334,14 @@
 .readerBody {
   flex: 1;
   min-height: 0;
-  padding: var(--otto-space-6) var(--otto-space-8) var(--otto-space-10);
+  padding: var(--otto-space-6) var(--otto-space-10) var(--otto-space-12);
   overflow-y: auto;
 }
 
 .editor {
   flex: 1;
   min-height: 0;
-  padding: var(--otto-space-6) var(--otto-space-8);
+  padding: var(--otto-space-6) var(--otto-space-10);
   border: 0;
   outline: none;
   background: transparent;

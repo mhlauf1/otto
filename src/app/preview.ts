@@ -120,7 +120,12 @@ const note = (
 
 /** Preview knowledge (the same for every workspace in the browser). */
 export const PREVIEW_KNOWLEDGE: KnowledgeEntry[] = [
-  note('global', 'About Mike.md', 'About Mike', 'Mike Laufersweiler: design engineer.'),
+  note(
+    'global',
+    'About Mike.md',
+    'About Mike',
+    'Mike Laufersweiler: design engineer. Works at Playbook (since March 2020) and runs Lauf, a studio that builds websites for clients.',
+  ),
   note('notes', 'Overview.md', 'Overview', 'The one note every session reads in full.'),
   note('notes', 'Clients.md', 'Clients', 'One line per client: who they are, their site.'),
   note('notes', 'Studio.md', 'Studio', 'Lauf: what the studio does and how it works.'),
