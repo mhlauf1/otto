@@ -222,3 +222,26 @@
   color: var(--otto-color-text-tertiary);
   font-size: var(--otto-type-footnote-size);
 }
+
+/* Single-field sheets (naming a group). */
+.compact {
+  width: min(420px, calc(100vw - var(--otto-space-12)));
+}
+
+.compact .body {
+  padding-top: var(--otto-space-2);
+  padding-bottom: var(--otto-space-4);
+}
+
+.compact .search {
+  width: 100%;
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

@@ -7,13 +7,31 @@ test.beforeEach(({ page }) => {
   });
 });
 
-test('hello window renders in both colour schemes', async ({ page }) => {
+test('Overview renders in both colour schemes', async ({ page }) => {
   for (const colorScheme of ['light', 'dark'] as const) {
     await page.emulateMedia({ colorScheme });
     await page.goto('/');
-    await expect(page.getByRole('heading', { level: 1 })).toContainText('Every identity');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Playbook');
     await expect(page.getByRole('navigation', { name: 'Workspaces' })).toBeVisible();
-    await page.screenshot({ path: `test-results/hello-${colorScheme}.png` });
+    await expect(page.getByRole('complementary', { name: 'What’s what' })).toBeVisible();
+    await page.screenshot({ path: `test-results/overview-${colorScheme}.png` });
+  }
+});
+
+test('Lauf sidebar nests projects under groups, with Knowledge', async ({ page }) => {
+  for (const colorScheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme });
+    await page.goto('/');
+    await page.locator('main').click();
+    await page.keyboard.press('Meta+2');
+    const clients = page.getByRole('region', { name: 'Clients' });
+    await expect(clients.getByText('stoc', { exact: true })).toBeVisible();
+    await clients.getByText('stoc', { exact: true }).hover();
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: `test-results/sidebar-lauf-${colorScheme}.png` });
+    await page.getByRole('button', { name: 'Knowledge' }).click();
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Knowledge');
+    await page.screenshot({ path: `test-results/knowledge-${colorScheme}.png` });
   }
 });
 

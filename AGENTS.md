@@ -36,7 +36,7 @@ Requires Node from `.nvmrc` (`nvm use`), pnpm 10 and Rust from `rust-toolchain.t
 | Command                                    | What it does                                                           |
 | ------------------------------------------ | ---------------------------------------------------------------------- |
 | `pnpm install`                             | Install JS dependencies (exact versions, frozen in CI)                 |
-| `pnpm dev`                                 | Run Otto (Vite + Tauri). Regenerates `src/bindings.ts` on launch       |
+| `pnpm dev`                                 | Run **Otto Dev** from the code, live-reloading. Own data (ADR-020)     |
 | `pnpm dev:web`                             | Browser-only preview at http://localhost:1420 (no Rust core)           |
 | `pnpm check`                               | Everything CI runs: lint, typecheck, unit tests, Rust fmt/clippy/tests |
 | `cargo test -p otto-core --test isolation` | The SPEC §4.6 isolation suite (a required CI job)                      |
@@ -45,7 +45,8 @@ Requires Node from `.nvmrc` (`nvm use`), pnpm 10 and Rust from `rust-toolchain.t
 | `pnpm bindings`                            | Regenerate `src/bindings.ts` from the Rust commands                    |
 | `pnpm icons`                               | Regenerate app icons from `src/assets/brand/app-icon.svg`              |
 | `pnpm build`                               | Release `.app` and `.dmg`                                              |
+| `pnpm app:install`                         | Build Otto.app, quit the installed one, swap it in and reopen it       |
 
-**Don't run the dev build and the installed Otto.app at the same time.** They share `~/Library/Application Support/Otto` (database, hooks, logins).
+**Otto Dev and Otto.app are separate apps.** `pnpm dev` uses `~/Library/Application Support/Otto Dev`, and the installed app uses `…/Otto`, so they can run side by side and dev work can never migrate or break the installed app's database (ADR-020). Otto Dev needs its own one-time sign-ins. Ship to the daily app with `pnpm app:install`.
 
 Generated files are committed and checked by tests: `src/design/tokens.css`, `src/bindings.ts`.

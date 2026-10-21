@@ -17,7 +17,7 @@ pub struct SessionInfo {
     pub agent: AgentKind,
     pub title: String,
     pub sign_in: bool,
-    /// The project the session runs in; `None` means the home folder.
+    /// The project the session runs in; `None` means General (the home folder).
     pub project_path: Option<String>,
 }
 
@@ -41,6 +41,10 @@ impl Sessions {
 
     pub fn insert(&self, info: SessionInfo, pty: PtySession) {
         self.lock().insert(info.id.clone(), Live { info, pty });
+    }
+
+    pub fn contains(&self, id: &str) -> bool {
+        self.lock().contains_key(id)
     }
 
     pub fn with<T>(&self, id: &str, f: impl FnOnce(&mut PtySession) -> T) -> Option<T> {

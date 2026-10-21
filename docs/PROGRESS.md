@@ -2,7 +2,26 @@
 
 Newest entries first.
 
-## Current milestone: M3 — Shell and design pass ✅
+## Current milestone: M3.5 — Shape and labels (built, awaiting Mike's check)
+
+Planned with Mike in the 2026-10-20 "where next" session: Phase A (this milestone), then Phase B Knowledge (M4, expanded), then M5 and M6.
+
+### Definition of done
+
+- [x] One set of words (SPEC §2.1), also shown on the Overview "What's what" card.
+- [x] Project groups inside a workspace (migration 0004). Lauf starts with Clients, Studio and Personal. Create, rename, reorder, delete, and move projects between groups.
+- [x] Isolation: a composite foreign key plus workspace-filtered store methods, so no cross-workspace group moves. New isolation test (25 total).
+- [x] Sidebar: segmented workspace switcher, Overview and Knowledge, groups → projects → sessions, General last, "+" on a project row opens a session there.
+- [x] Overview page and a Knowledge placeholder. The title bar reads workspace · project · session.
+- [x] Composer removed; the terminal is the only input (ADR-018).
+- [x] Selected project, page and collapsed rows remembered across launches.
+- [x] Mobbin references (5) in DESIGN.md. Light and dark screenshots, one QA fix.
+- [x] Earlier Claude conversations listed under each project and resumable with one click (ADR-019, pulled forward from M5). New isolation test (26 total).
+- [x] Mike's first-look fixes: obvious add rows, "+" per group, an "Add a project" row in empty groups, rename projects (migration 0005).
+- [x] Otto Dev (own data folder and bundle ID, "Dev" tag) and `pnpm app:install` (ADR-020).
+- [ ] Mike tries it in the app (`pnpm dev`): put stoc under Clients, start a session from its row, and check it nests there.
+
+## Previous milestone: M3 — Shell and design pass ✅
 
 ### Definition of done
 
@@ -56,11 +75,26 @@ Newest entries first.
 - [x] ADR-005 to ADR-008 for isolation (credential storage, SSH, hooks, env allowlist).
 - [x] `LEARNING.md` chapter 0.
 - [x] Mike reviewed the app and approved the brand (2026-10-20). The `mhlauf1/otto` repo has been created.
-- [ ] First push. This is blocked until a Lauf (`mhlauf1`) GitHub login exists; the only credential on this Mac is `mikelauf` (Playbook).
+- [x] First push (done once the `mhlauf1` login existed; CI is green on GitHub).
 
 **Not done on purpose:** there's no placeholder `isolation-suite` CI job. A job that passes with zero tests would claim a guarantee we don't have yet (SPEC §0.3). M1 adds the real suite as a required check.
 
 ### Log
+
+#### 2026-10-20 (where next, and M3.5)
+
+- Mike reviewed Otto after using it for real: he worked on stoc in a Lauf session and merged and deployed with no sign-in. He asked for a step back on structure, labels, knowledge and the centre pane.
+- Decisions:
+  - Sessions nest under projects.
+  - The terminal stays in the centre; a chat view is parked.
+  - Lauf gets groups inside one identity.
+  - Knowledge covers notes for agents, the repo-docs index, private notes and an "Ask" session, plus company and code understanding, diagrams and assets.
+  - Compose is removed.
+- Built Phase A (M3.5), described above. ADR-017 and ADR-018. SPEC §2.1, §3, §5.3, §6.3, §11 and the changelog updated with Mike's approval of the plan.
+- Mike reported that the changes weren't showing and his stoc session was gone. Causes: he was running the old installed Otto.app, and relaunching Otto ends in-memory sessions. The conversation was safe in the Lauf Claude config. Built resume (ADR-019) and rebuilt Otto.app.
+- Fixed a bug: "+" on General could open the session in the last-selected project. Every caller now passes the folder explicitly.
+- Next: Mike checks M3.5. Then Phase B, M4 Knowledge: rewrite SPEC §7 first (feed agents through each workspace's own `CLAUDE.md` and `AGENTS.md`, never through repo files), as ADR-021.
+- Still open: revoke the tokens found in the port-v1 and cadence-private-capital remotes.
 
 #### 2026-10-20 (hardening for daily use)
 
@@ -91,6 +125,5 @@ Newest entries first.
 
 ### Blockers / notes
 
-- Rust is not installed yet, and the Codex CLI is missing (needed by M2).
 - gh 2.48 is old. Suggest `brew upgrade gh`.
 - This Claude Code session runs on the Playbook account. Otto is a Lauf project, so consider continuing under the Lauf Claude account.

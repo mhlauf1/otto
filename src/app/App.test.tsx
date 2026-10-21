@@ -1,12 +1,19 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { useWorkspaceUi } from '../state/workspace';
 import { App } from './App';
 
 afterEach(() => {
   cleanup();
-  useWorkspaceUi.setState({ activeId: null, inspectorOpen: true });
+  localStorage.clear();
+  useWorkspaceUi.setState({
+    activeId: null,
+    inspectorOpen: true,
+    projectByWorkspace: {},
+    pageByWorkspace: {},
+    collapsed: {},
+  });
 });
 
 const renderApp = () =>
@@ -40,5 +47,78 @@ describe('App', () => {
     expect(await screen.findByRole('complementary', { name: 'Identity Doctor' })).toBeTruthy();
     fireEvent.keyDown(window, { key: 'I', code: 'KeyI', metaKey: true, shiftKey: true });
     expect(screen.queryByRole('complementary', { name: 'Identity Doctor' })).toBeNull();
+  });
+
+  it('nests projects under their group, with General last (ADR-017)', async () => {
+    renderApp();
+    await screen.findByRole('navigation', { name: 'Workspaces' });
+    fireEvent.keyDown(window, { key: '2', code: 'Digit2', metaKey: true });
+    const clients = await screen.findByRole('region', { name: 'Clients' });
+    expect(within(clients).getByText('stoc')).toBeTruthy();
+    expect(within(clients).getByText('Kingdom Canine')).toBeTruthy();
+    expect(within(screen.getByRole('region', { name: 'Studio' })).getByText('otto')).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Projects' })).toBeTruthy();
+    expect(
+      within(screen.getByRole('region', { name: 'General' })).getByText('General'),
+    ).toBeTruthy();
+  });
+
+  it('opens new sessions in the project you pick, or General', async () => {
+    renderApp();
+    await screen.findByRole('navigation', { name: 'Workspaces' });
+    fireEvent.keyDown(window, { key: '2', code: 'Digit2', metaKey: true });
+    // General's own "+" and the sidebar's "+ New session" both target General.
+    expect(
+      await screen.findAllByRole('button', { name: 'New session in Lauf · General' }),
+    ).toHaveLength(2);
+    fireEvent.click(within(screen.getByRole('region', { name: 'Clients' })).getByText('stoc'));
+    expect(screen.getAllByRole('button', { name: 'New session in Lauf · stoc' })).toHaveLength(2);
+  });
+
+  it('lands on Overview with the glossary, and switches to Knowledge', async () => {
+    renderApp();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Playbook' })).toBeTruthy();
+    expect(screen.getByRole('complementary', { name: 'What’s what' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Knowledge' }));
+    expect(screen.getByRole('heading', { level: 1, name: 'Knowledge' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Knowledge' }).getAttribute('aria-current')).toBe(
+      'page',
+    );
+  });
+
+  it('has one input: no Compose button and no ⌘L composer', async () => {
+    renderApp();
+    await screen.findByRole('navigation', { name: 'Workspaces' });
+    fireEvent.keyDown(window, { key: 'l', code: 'KeyL', metaKey: true });
+    expect(screen.queryByRole('button', { name: /compose/i })).toBeNull();
+    expect(screen.queryByRole('textbox')).toBeNull();
+  });
+
+  it('lists a project’s earlier Claude conversations under it, ready to resume', async () => {
+    renderApp();
+    await screen.findByRole('navigation', { name: 'Workspaces' });
+    fireEvent.keyDown(window, { key: '2', code: 'Digit2', metaKey: true });
+    const clients = await screen.findByRole('region', { name: 'Clients' });
+    expect(
+      await within(clients).findByRole('button', {
+        name: /STOC project with mhlauf account/,
+      }),
+    ).toBeTruthy();
+    expect(within(clients).getByRole('button', { name: 'Collapse stoc' })).toBeTruthy();
+  });
+
+  it('makes adding obvious: a "+" on every group, rows for import and new group', async () => {
+    renderApp();
+    await screen.findByRole('navigation', { name: 'Workspaces' });
+    fireEvent.keyDown(window, { key: '2', code: 'Digit2', metaKey: true });
+    const personal = await screen.findByRole('region', { name: 'Personal' });
+    // An empty group offers to add, instead of explaining how.
+    expect(
+      within(personal).getAllByRole('button', { name: 'Add a project to Personal' }),
+    ).toHaveLength(2);
+    expect(screen.queryByText(/No projects yet/)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Add a project to Clients' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Import projects…/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /New group…/ })).toBeTruthy();
   });
 });

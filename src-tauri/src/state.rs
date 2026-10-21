@@ -5,6 +5,15 @@ use otto_core::provision::provision;
 use otto_core::store::{Store, StoreError};
 use otto_core::workspace::{OttoPaths, Workspace, WorkspaceId};
 
+/// The data folder under `~/Library/Application Support`. The dev build (`pnpm dev`) gets its
+/// own, so working on Otto can never touch the installed app's database, logins or hooks
+/// (ADR-020).
+pub const DATA_FOLDER: &str = if cfg!(debug_assertions) {
+    "Otto Dev"
+} else {
+    "Otto"
+};
+
 pub struct AppState {
     pub paths: OttoPaths,
     pub host: HostEnv,
@@ -32,7 +41,11 @@ impl AppState {
         if host.home.as_os_str().is_empty() || host.home == std::path::Path::new("/") {
             return Err(StartupError::NoHome);
         }
-        let paths = OttoPaths::new(host.home.join("Library/Application Support/Otto"));
+        let paths = OttoPaths::new(
+            host.home
+                .join("Library/Application Support")
+                .join(DATA_FOLDER),
+        );
         std::fs::create_dir_all(paths.root())?;
         let store = Store::open(&paths.database()).await?;
         store.seed_defaults().await?;

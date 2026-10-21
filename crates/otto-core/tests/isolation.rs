@@ -817,3 +817,100 @@ fn local_only_repos_open_when_assigned_but_never_with_a_foreign_remote() {
         "{refused:?}"
     );
 }
+
+/// ADR-017: groups live inside one workspace. Neither the store nor the database
+/// itself lets a project sit in, or be moved by, another workspace.
+#[tokio::test]
+async fn project_groups_never_cross_workspaces() {
+    use otto_core::repo::VerifiedRepo;
+    use otto_core::store::{Store, StoreError};
+    use otto_core::workspace::WorkspaceId;
+
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::open(&dir.path().join("otto.db")).await.unwrap();
+    store.seed_defaults().await.unwrap();
+    let (playbook, lauf) = (
+        WorkspaceId::parse("playbook").unwrap(),
+        WorkspaceId::parse("lauf").unwrap(),
+    );
+    let core = VerifiedRepo {
+        path: "/core".into(),
+        remote_url: Some("https://github.com/lulafit/core".into()),
+    };
+    store.register_repo(&playbook, &core).await.unwrap();
+    let pb_group = store.create_project_group(&playbook, "Core").await.unwrap();
+
+    // A Playbook project can't go into a Lauf group, through either workspace.
+    for actor in [&playbook, &lauf] {
+        let moved = store
+            .move_project(actor, "/core", Some("lauf-clients"))
+            .await;
+        assert!(matches!(moved, Err(StoreError::Rejected(_))), "{moved:?}");
+    }
+    // Lauf can't move, rename or delete Playbook's projects or groups.
+    assert!(store.move_project(&lauf, "/core", None).await.is_err());
+    assert!(store.rename_project(&lauf, "/core", "Mine").await.is_err());
+    assert!(
+        store
+            .rename_project_group(&lauf, &pb_group.id, "Mine")
+            .await
+            .is_err()
+    );
+    assert!(
+        store
+            .delete_project_group(&lauf, &pb_group.id)
+            .await
+            .is_err()
+    );
+    // Nothing changed, and the legitimate move still works.
+    let core_now = &store.projects(&playbook).await.unwrap()[0];
+    assert_eq!(
+        (core_now.group_id.as_deref(), core_now.name.as_str()),
+        (None, "core")
+    );
+    store
+        .move_project(&playbook, "/core", Some(&pb_group.id))
+        .await
+        .unwrap();
+    assert!(
+        store
+            .project_groups(&lauf)
+            .await
+            .unwrap()
+            .iter()
+            .all(|g| g.id != pb_group.id)
+    );
+}
+
+/// Past conversations are read from each workspace's own Claude config, so a Playbook
+/// conversation can't be listed (or resumed) from Lauf, even for the same folder.
+#[test]
+fn past_conversations_never_cross_workspaces() {
+    use otto_core::history;
+
+    let world = World::new();
+    let cwd = world.dir.path().join("shared-folder");
+    let id = "7de656b9-96e1-4226-9fbe-c8d129813f94";
+    let playbook_dir =
+        history::conversations_dir(&world.layout(&world.playbook).claude_dir(), &cwd);
+    fs::create_dir_all(&playbook_dir).unwrap();
+    fs::write(
+        playbook_dir.join(format!("{id}.jsonl")),
+        r#"{"type":"user","message":{"content":"playbook roadmap"}}"#,
+    )
+    .unwrap();
+
+    let playbook = history::list(&world.layout(&world.playbook).claude_dir(), &cwd, 10);
+    assert_eq!(playbook.len(), 1);
+    assert_eq!(playbook[0].id, id);
+    assert_eq!(
+        history::list(&world.layout(&world.lauf).claude_dir(), &cwd, 10),
+        []
+    );
+    // And each workspace's Claude really is pointed at its own config dir.
+    let env = IsolatedEnv::build(&world.lauf, &world.layout(&world.lauf), &world.host);
+    assert_eq!(
+        env.get("CLAUDE_CONFIG_DIR").map(PathBuf::from),
+        Some(world.layout(&world.lauf).claude_dir())
+    );
+}

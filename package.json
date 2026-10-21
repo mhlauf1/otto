@@ -8,9 +8,10 @@
     "node": ">=24.22"
   },
   "scripts": {
-    "dev": "tauri dev",
+    "dev": "tauri dev --config src-tauri/tauri.dev.conf.json",
     "dev:web": "vite",
     "build": "tauri build",
+    "app:install": "bash scripts/install-app.sh",
     "build:web": "tsc --noEmit && vite build",
     "tauri": "tauri",
     "tokens": "tsx scripts/gen-tokens.ts",

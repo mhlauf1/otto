@@ -1,0 +1,445 @@
+/* ── Sidebar: translucent, so native vibrancy shows through ─────────── */
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--otto-space-3);
+  min-height: 0;
+  padding: 0 var(--otto-space-3) var(--otto-space-4);
+  background: var(--otto-color-sidebar);
+  border-right: 1px solid var(--otto-color-border-subtle);
+}
+
+.titlebar {
+  height: var(--otto-titlebar-height);
+  flex-shrink: 0;
+}
+
+/* Sits directly under the traffic lights. */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--otto-space-2);
+  padding: 0 var(--otto-space-2);
+  margin-top: calc(var(--otto-space-2) * -1);
+  color: var(--otto-color-text-primary);
+}
+
+/* Marks the window running from the code, so it's never mistaken for the installed app. */
+.devTag {
+  padding: 0 var(--otto-space-1-5);
+  border: 1px solid var(--otto-color-border-strong);
+  border-radius: var(--otto-radius-full);
+  color: var(--otto-color-text-secondary);
+  font-size: var(--otto-type-caption-size);
+  line-height: var(--otto-type-caption-line);
+  font-weight: var(--otto-type-caption-weight);
+}
+
+/* ── Workspace switcher: one segment per identity ───────────────────── */
+
+.switcher {
+  display: flex;
+  gap: var(--otto-space-0-5);
+  padding: var(--otto-space-0-5);
+  border-radius: var(--otto-radius-md);
+  background: var(--otto-color-fill-hover);
+}
+
+.segment {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: var(--otto-space-1-5);
+  min-width: 0;
+  height: 28px;
+  padding: 0 var(--otto-space-2);
+  border: 0;
+  border-radius: var(--otto-radius-sm);
+  background: transparent;
+  color: var(--otto-color-text-secondary);
+  transition-property: background-color, color;
+  transition-duration: var(--otto-duration-fast);
+  transition-timing-function: var(--otto-easing-standard);
+}
+
+.segmentName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.segment:hover {
+  color: var(--otto-color-text-primary);
+}
+
+.segment[aria-current='true'] {
+  background: var(--otto-color-surface-raised);
+  color: var(--otto-color-text-primary);
+  font-weight: var(--otto-type-headline-weight);
+  box-shadow: var(--otto-shadow-sm);
+}
+
+/* ── Rows ───────────────────────────────────────────────────────────── */
+
+.scroll {
+  flex: 1;
+  min-height: 0;
+  margin: 0 calc(var(--otto-space-1) * -1);
+  padding: 0 var(--otto-space-1);
+  overflow-y: auto;
+}
+
+.list,
+.sessions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--otto-space-0-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Sessions sit one step in from their project, lined up with its name. */
+.sessions {
+  margin: var(--otto-space-0-5) 0 var(--otto-space-1);
+  padding-left: var(--otto-space-5);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--otto-space-2);
+  width: 100%;
+  height: 28px;
+  padding: 0 var(--otto-space-2);
+  border: 0;
+  border-radius: var(--otto-radius-sm);
+  background: transparent;
+  text-align: left;
+  transition-property: background-color;
+  transition-duration: var(--otto-duration-fast);
+  transition-timing-function: var(--otto-easing-standard);
+}
+
+.row:hover {
+  background: var(--otto-color-fill-hover);
+}
+
+.row[aria-current='true'],
+.row[aria-current='page'] {
+  background: var(--otto-color-fill-selected);
+}
+
+.rowName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+/* Each segment carries its own workspace accent, regardless of which one is active. */
+.dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--otto-radius-full);
+  background: var(--otto-accent);
+}
+
+.health {
+  font-size: var(--otto-type-caption-size);
+  font-weight: var(--otto-type-headline-weight);
+  color: var(--otto-color-success);
+}
+
+.health[data-state='blocked'] {
+  color: var(--otto-color-danger);
+}
+
+/* ── Project tree ───────────────────────────────────────────────────── */
+
+.tree {
+  display: flex;
+  flex-direction: column;
+  gap: var(--otto-space-3);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 24px;
+  padding: 0 var(--otto-space-1) 0 var(--otto-space-2);
+}
+
+.sectionLabel,
+.sectionToggle {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--otto-color-text-tertiary);
+  font-size: var(--otto-type-caption-size);
+  line-height: var(--otto-type-caption-line);
+  font-weight: var(--otto-type-caption-weight);
+  letter-spacing: var(--otto-type-caption-tracking);
+  text-align: left;
+}
+
+.sectionToggle:hover {
+  color: var(--otto-color-text-secondary);
+}
+
+.moreButton {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--otto-radius-xs);
+  background: transparent;
+  color: var(--otto-color-text-secondary);
+  font-size: var(--otto-type-caption-size);
+  letter-spacing: var(--otto-type-caption-tracking);
+}
+
+.moreButton:hover,
+.moreButton[data-state='open'] {
+  background: var(--otto-color-fill-selected);
+  color: var(--otto-color-text-primary);
+}
+
+.sectionHeader .moreButton {
+  opacity: 0;
+}
+
+.sectionHeader:hover .moreButton,
+.sectionHeader:focus-within .moreButton,
+.moreButton[data-state='open'] {
+  opacity: 1;
+}
+
+.projectRow {
+  display: flex;
+  align-items: center;
+  height: 28px;
+  padding-right: var(--otto-space-1);
+  border-radius: var(--otto-radius-sm);
+  transition-property: background-color;
+  transition-duration: var(--otto-duration-fast);
+  transition-timing-function: var(--otto-easing-standard);
+}
+
+.projectRow:hover {
+  background: var(--otto-color-fill-hover);
+}
+
+/* The project new sessions open in. */
+.projectRow[data-current='true'] .rowName {
+  color: var(--otto-color-text-primary);
+  font-weight: var(--otto-type-headline-weight);
+}
+
+.chevron {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 20px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--otto-color-text-tertiary);
+  font-size: var(--otto-type-caption-size);
+}
+
+.projectName {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--otto-space-2);
+  min-width: 0;
+  height: 100%;
+  padding: 0 var(--otto-space-1) 0 0;
+  border: 0;
+  background: transparent;
+  color: var(--otto-color-text-secondary);
+  text-align: left;
+}
+
+.rowActions {
+  display: flex;
+  gap: var(--otto-space-0-5);
+  opacity: 0;
+}
+
+.rowActions:has([data-state='open']) {
+  opacity: 1;
+}
+
+.projectRow:hover .rowActions,
+.projectRow:focus-within .rowActions {
+  opacity: 1;
+}
+
+.menuSeparator {
+  height: 1px;
+  margin: var(--otto-space-1) 0;
+  background: var(--otto-color-border-subtle);
+}
+
+/* Always-visible "add" rows: as prominent as a project, quieter in colour. */
+.addRow {
+  display: flex;
+  align-items: center;
+  gap: var(--otto-space-0-5);
+  width: 100%;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--otto-radius-sm);
+  background: transparent;
+  color: var(--otto-color-text-secondary);
+  text-align: left;
+}
+
+.addRow:hover,
+.addRow[data-state='open'] {
+  background: var(--otto-color-fill-hover);
+  color: var(--otto-color-text-primary);
+}
+
+.addIcon {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 20px;
+  color: var(--otto-color-text-tertiary);
+  font-size: var(--otto-type-callout-size);
+}
+
+.headerAdd {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  border-radius: var(--otto-radius-xs);
+  background: transparent;
+  color: var(--otto-color-text-tertiary);
+  font-size: var(--otto-type-callout-size);
+}
+
+.headerAdd:hover,
+.headerAdd[data-state='open'] {
+  background: var(--otto-color-fill-selected);
+  color: var(--otto-color-text-primary);
+}
+
+.chevronIcon {
+  transition-property: transform;
+  transition-duration: var(--otto-duration-fast);
+  transition-timing-function: var(--otto-easing-standard);
+}
+
+.chevronIcon[data-open='true'] {
+  transform: rotate(90deg);
+}
+
+.localOnly {
+  color: var(--otto-color-text-tertiary);
+  font-size: var(--otto-type-caption-size);
+}
+
+.sessionState {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--otto-radius-full);
+  background: var(--otto-color-border-strong);
+}
+
+.sessionState[data-state='running'] {
+  background: var(--otto-accent);
+}
+
+/* Earlier (closed) conversations: an open ring, quieter text, and when. */
+.earlierState {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border: 1px solid var(--otto-color-text-tertiary);
+  border-radius: var(--otto-radius-full);
+}
+
+.row[data-earlier='true'] {
+  color: var(--otto-color-text-secondary);
+}
+
+.when {
+  flex-shrink: 0;
+  color: var(--otto-color-text-tertiary);
+  font-size: var(--otto-type-caption-size);
+}
+
+.showMore {
+  padding: var(--otto-space-0-5) var(--otto-space-2) var(--otto-space-0-5) var(--otto-space-5);
+  border: 0;
+  background: transparent;
+  color: var(--otto-color-text-tertiary);
+  font-size: var(--otto-type-footnote-size);
+}
+
+.showMore:hover {
+  color: var(--otto-color-text-primary);
+}
+
+/* ── Identity footer ────────────────────────────────────────────────── */
+
+.identityFooter {
+  display: flex;
+  align-items: center;
+  gap: var(--otto-space-2);
+  padding: var(--otto-space-2);
+  border-radius: var(--otto-radius-md);
+}
+
+.avatar {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--otto-radius-full);
+  background: var(--otto-accent);
+  color: var(--otto-color-text-on-accent);
+  font-size: var(--otto-type-caption-size);
+  font-weight: var(--otto-type-headline-weight);
+}
+
+.identityText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.identityName {
+  font-weight: var(--otto-type-headline-weight);
+}
+
+.identityEmail {
+  overflow: hidden;
+  color: var(--otto-color-text-tertiary);
+  font-size: var(--otto-type-caption-size);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

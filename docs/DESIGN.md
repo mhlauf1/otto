@@ -145,3 +145,40 @@ Two inputs (Claude's own `❯` line plus Otto's composer) were confusing, and �
 - **The terminal is the everyday input.** The composer is now an on-demand sheet: ⌘L or the title-bar "Compose" button. ↵ sends, ⇧↵ adds a line, esc closes and returns focus to the terminal. It doesn't send while dictation or IME text is still composing.
 - **One "+ New session" menu** (Radix DropdownMenu) replaces three equal chips: Claude Code (⌘T), Codex, and Shell (described as "Terminal signed in as this workspace").
 - **Known gap:** sessions open in the home folder. A project picker is next on the list.
+
+## M3.5 — Shape and labels (2026-10-20)
+
+Mike still found the composer confusing after the M3 revision, and couldn't tell how workspaces, projects and sessions related. This pass gives every part one clear word (SPEC §2.1) and one place.
+
+### Mobbin references
+
+| Reference                                                                                     | What Otto takes from it                                                                                                   |
+| --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| [ChatGPT — projects sidebar](https://mobbin.com/screens/8b37adf6-385f-4d04-afb8-99ce66b1d17f) | Chats listed under their project, one step in. Otto lists sessions under their project the same way                       |
+| [Height — team sections](https://mobbin.com/screens/62cabfa8-fa79-43f7-8f02-11ee362b4609)     | Caption-label sections with indented children, so groups like Clients and Studio read as headings, not rows               |
+| [Wrike — spaces tree](https://mobbin.com/screens/d750f820-568f-4a4f-8540-1692449871de)        | A chevron to expand, plus "+" and "···" that appear only on hover, so the tree stays quiet                                |
+| [Plane — project overview](https://mobbin.com/screens/b40e6a3a-28da-4f4d-86ba-3bd593a9fdf0)   | A left-aligned landing page with a header and a properties side card. This became the Overview and its "What's what" card |
+| [Coda — workspace home](https://mobbin.com/screens/ba6f5461-ff84-4795-b8f6-a11d5a7526a9)      | The workspace name as the page title, with a plain recent-items list under it                                             |
+
+### What was built
+
+- **Workspace switcher:** a segmented control. Each segment shows its own dot, name and ✓/✕, and the active one lifts on the raised surface. It replaces the Workspaces list.
+- **Tree:** groups (caption labels; ··· gives Rename, Move up or down, Delete), then projects (chevron, name, a `local` tag, and "+" and "···" on hover), then sessions indented under them.
+  - "Other projects" holds anything ungrouped. Playbook has no groups yet, so its section is labelled "Projects".
+  - **General** comes last.
+  - The project new sessions open in is shown in bold, and "+ New session" names it ("New session in Lauf · stoc").
+- **Title bar:** a workspace · project · session breadcrumb, with the workspace in its accent.
+- **Overview:** the workspace name, a ✓ All clear or ✕ Pushes blocked pill that opens Identity, Running now, Projects (hover for "Open Claude Code"), the "What's what" glossary card, and the core status.
+- **Knowledge:** a placeholder that says plainly what M4 adds.
+- **Removed:** the composer and the title-bar Compose button (ADR-018).
+
+### Design QA
+
+`pnpm test:e2e` writes `overview-{light,dark}.png`, `sidebar-lauf-{light,dark}.png` and `knowledge-{light,dark}.png`. In the first pass the switcher's dot floated away from the name, because the name stretched to fill the segment. The segment now centres its contents.
+
+### Iteration after Mike's first look (2026-10-20)
+
+- **Adding is visible, not hinted.** "Import projects…" and "New group…" are full 28px rows with a "+", in secondary text rather than tertiary. Every group heading has an always-visible "+" with a menu: move an existing project in, or "Import new projects…" straight into that group.
+- **Empty groups offer an action.** "+ Add a project" replaces the "No projects yet. Use ··· …" hint.
+- **Names, not folders.** Rename a project from its ··· menu. The tooltip still shows the folder name.
+- **Chevron:** a drawn SVG that rotates, replacing the ▸ text glyph, which rendered like a dot at caption size.
