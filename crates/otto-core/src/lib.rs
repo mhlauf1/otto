@@ -8,6 +8,7 @@
 //! - [`doctor`]: the Identity Doctor
 //! - [`agent`] and [`pty`]: agent sessions in real terminals
 //! - [`history`]: past Claude conversations, for resuming
+//! - [`knowledge`]: notes, generated instruction files and project docs (SPEC §7)
 //! - [`store`]: SQLite app state
 
 pub mod agent;
@@ -17,6 +18,7 @@ pub mod doctor;
 pub mod env;
 pub mod history;
 pub mod hooks;
+pub mod knowledge;
 pub mod projects;
 pub mod provision;
 pub mod pty;

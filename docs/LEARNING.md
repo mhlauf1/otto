@@ -159,3 +159,31 @@ Migration 0004 had to rebuild a table to add a constraint, but 0005 only adds a 
 ### Dev build vs installed app
 
 `pnpm dev` runs Otto straight from the code. The UI hot-reloads like a website on localhost, and Rust changes rebuild and reopen the window. `pnpm build` packs everything into a standalone `Otto.app`. Debug builds compile with `debug_assertions` on, so Otto uses that switch to pick the "Otto Dev" data folder. The two can't share or break each other's data.
+
+---
+
+## Chapter 5 — Knowledge (M4)
+
+### Global instruction files
+
+Claude Code reads a `CLAUDE.md` from its config folder on every session, as well as the one in the repo. Codex does the same with `AGENTS.md` in `CODEX_HOME`. Because each Otto workspace has its own config folders, Otto can write a different file for each one. That's how Lauf's agents learn about Lauf, and Playbook's about Playbook, without either repo changing.
+
+### An index instead of everything
+
+Pasting every note into every session would make each one slower and more expensive. Instead, the file lists each note's title, one-line summary and path, and the agent opens a note when the task needs it. It's the same idea as a book's table of contents.
+
+### Resolving paths safely
+
+When the UI asks for `Clients.md`, Otto joins it to the area's folder and then resolves symlinks with `canonicalize`. Only if the real path is still inside that folder does it read anything. That one check blocks `../`, absolute paths and symlinks that point somewhere else.
+
+### `data:` URLs
+
+Otto's security policy blocks the window from loading local files. To show an image, Rust reads it and sends it as text, `data:image/png;base64,…`, which the policy does allow. Base64 is just a way to write bytes using 64 safe characters.
+
+### Loading big libraries only when needed
+
+Mermaid (the diagram library) is large. `await import('mermaid')` fetches it the first time a note contains a diagram, so the rest of Otto starts fast.
+
+### Write, then rename
+
+A save writes to a temporary file and then renames it over the note. A rename is all-or-nothing on macOS, so a crash mid-save leaves either the old note or the new one, never half of one.

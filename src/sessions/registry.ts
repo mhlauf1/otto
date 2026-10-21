@@ -2,7 +2,13 @@ import { Channel } from '@tauri-apps/api/core';
 import { FitAddon } from '@xterm/addon-fit';
 import { Terminal } from '@xterm/xterm';
 import { create } from 'zustand';
-import { commands, type AgentKind, type PtyEvent, type SessionInfo } from '../bindings';
+import {
+  commands,
+  type AgentKind,
+  type CommandError,
+  type PtyEvent,
+  type SessionInfo,
+} from '../bindings';
 import { font, terminal as palette } from '../design/tokens';
 
 /**
@@ -26,6 +32,8 @@ interface SessionsState {
     agent: AgentKind,
     options?: { signIn?: boolean; projectPath?: string | undefined; resumeId?: string | undefined },
   ) => Promise<LiveSession>;
+  /** Ask: Claude Code over the workspace's knowledge and projects (SPEC §7.5). */
+  openAsk: (workspaceId: string, includePrivate: boolean) => Promise<LiveSession>;
   close: (id: string) => void;
   select: (workspaceId: string, id: string | undefined) => void;
   /** Called when a session ends (e.g. a sign-in flow finishes). */
@@ -50,12 +58,14 @@ function newTerminal(): { term: Terminal; fit: FitAddon } {
   return { term, fit };
 }
 
-export const useSessions = create<SessionsState>((set, get) => ({
-  sessions: [],
-  activeByWorkspace: {},
+type Started = { status: 'ok'; data: SessionInfo } | { status: 'error'; error: CommandError };
 
-  open: async (workspaceId, agent, options = {}) => {
-    const signIn = options.signIn ?? false;
+export const useSessions = create<SessionsState>((set, get) => {
+  /** Give `start` a fresh terminal's output channel, then wire the terminal to the result. */
+  const attach = async (
+    workspaceId: string,
+    start: (channel: Channel<PtyEvent>) => Promise<Started>,
+  ): Promise<LiveSession> => {
     const { term, fit } = newTerminal();
     const channel = new Channel<PtyEvent>();
     let id = '';
@@ -74,16 +84,7 @@ export const useSessions = create<SessionsState>((set, get) => ({
       if (ended) get().onExit?.(ended);
     };
 
-    const result = await commands.openSession(
-      workspaceId,
-      agent,
-      signIn,
-      options.projectPath ?? null,
-      options.resumeId ?? null,
-      100,
-      30,
-      channel,
-    );
+    const result = await start(channel);
     if (result.status === 'error') {
       term.dispose();
       throw new SessionError(result.error.message);
@@ -104,25 +105,49 @@ export const useSessions = create<SessionsState>((set, get) => ({
       activeByWorkspace: { ...s.activeByWorkspace, [workspaceId]: id },
     }));
     return session;
-  },
+  };
 
-  close: (id) => {
-    const session = get().sessions.find((s) => s.info.id === id);
-    if (!session) return;
-    void commands.closeSession(id);
-    session.term.dispose();
-    set((s) => {
-      const remaining = s.sessions.filter((x) => x.info.id !== id);
-      const ws = session.info.workspaceId;
-      const next =
-        s.activeByWorkspace[ws] === id
-          ? remaining.filter((x) => x.info.workspaceId === ws).at(-1)?.info.id
-          : s.activeByWorkspace[ws];
-      return { sessions: remaining, activeByWorkspace: { ...s.activeByWorkspace, [ws]: next } };
-    });
-  },
+  return {
+    sessions: [],
+    activeByWorkspace: {},
 
-  select: (workspaceId, id) => {
-    set((s) => ({ activeByWorkspace: { ...s.activeByWorkspace, [workspaceId]: id } }));
-  },
-}));
+    open: (workspaceId, agent, options = {}) =>
+      attach(workspaceId, (channel) =>
+        commands.openSession(
+          workspaceId,
+          agent,
+          options.signIn ?? false,
+          options.projectPath ?? null,
+          options.resumeId ?? null,
+          100,
+          30,
+          channel,
+        ),
+      ),
+
+    openAsk: (workspaceId, includePrivate) =>
+      attach(workspaceId, (channel) =>
+        commands.openAsk(workspaceId, includePrivate, 100, 30, channel),
+      ),
+
+    close: (id) => {
+      const session = get().sessions.find((s) => s.info.id === id);
+      if (!session) return;
+      void commands.closeSession(id);
+      session.term.dispose();
+      set((s) => {
+        const remaining = s.sessions.filter((x) => x.info.id !== id);
+        const ws = session.info.workspaceId;
+        const next =
+          s.activeByWorkspace[ws] === id
+            ? remaining.filter((x) => x.info.workspaceId === ws).at(-1)?.info.id
+            : s.activeByWorkspace[ws];
+        return { sessions: remaining, activeByWorkspace: { ...s.activeByWorkspace, [ws]: next } };
+      });
+    },
+
+    select: (workspaceId, id) => {
+      set((s) => ({ activeByWorkspace: { ...s.activeByWorkspace, [workspaceId]: id } }));
+    },
+  };
+});

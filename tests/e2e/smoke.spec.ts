@@ -31,6 +31,11 @@ test('Lauf sidebar nests projects under groups, with Knowledge', async ({ page }
     await page.screenshot({ path: `test-results/sidebar-lauf-${colorScheme}.png` });
     await page.getByRole('button', { name: 'Knowledge' }).click();
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Knowledge');
+    await page
+      .getByRole('navigation', { name: 'Lauf knowledge' })
+      .getByRole('button', { name: /^Clients/ })
+      .click();
+    await expect(page.locator('article svg[id^="mermaid"]')).toBeVisible({ timeout: 10_000 });
     await page.screenshot({ path: `test-results/knowledge-${colorScheme}.png` });
   }
 });

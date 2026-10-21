@@ -121,4 +121,25 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: /Import projects…/ })).toBeTruthy();
     expect(screen.getByRole('button', { name: /New group…/ })).toBeTruthy();
   });
+
+  it('Knowledge lists shared, agent-read and private notes, and reads one', async () => {
+    renderApp();
+    await screen.findByRole('navigation', { name: 'Workspaces' });
+    fireEvent.keyDown(window, { key: '2', code: 'Digit2', metaKey: true });
+    fireEvent.click(screen.getByRole('button', { name: 'Knowledge' }));
+    const list = await screen.findByRole('navigation', { name: 'Lauf knowledge' });
+    expect(within(list).getByRole('region', { name: 'Shared' })).toBeTruthy();
+    expect(within(list).getByRole('button', { name: /About Mike/ })).toBeTruthy();
+    expect(
+      within(within(list).getByRole('region', { name: 'Private' })).getByText('Rates'),
+    ).toBeTruthy();
+    expect(within(list).getByRole('region', { name: 'From your projects' })).toBeTruthy();
+
+    fireEvent.click(within(list).getByRole('button', { name: /^Clients/ }));
+    expect(await screen.findByText('Agents read this')).toBeTruthy();
+    expect(await screen.findByText('Brady Digital Consulting')).toBeTruthy();
+    fireEvent.click(within(list).getByRole('button', { name: /Rates/ }));
+    expect(await screen.findByText('Private: agents don’t read this')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Ask Lauf' })).toBeTruthy();
+  });
 });
