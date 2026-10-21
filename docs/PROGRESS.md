@@ -2,7 +2,17 @@
 
 Newest entries first.
 
-## Current milestone: M5a — Sessions survive restarts (built, awaiting Mike's check)
+## Current milestone: M5b — Up next and parallel tasks (built, awaiting Mike's check)
+
+### Definition of done
+
+- [x] Mike chose the "Up next" panel and worktrees inside Otto's data folder. SPEC §8.2, ADR-024.
+- [x] Queue (migration 0007): add with ↵, remove with ×. Sent automatically when the agent reports it finished, never while working or waiting, never twice (`claim_idle`).
+- [x] Parallel: "Run in parallel" or ⌘↵ makes an `otto/<task>` worktree and starts the agent there with the prompt. Shown under the project with its branch. Resumable. Remove from the project's ··· menu (refused when dirty or in use; the branch is kept).
+- [x] Tests: 64 core, 30 isolation (new: worktree identity, guardrails and removal against real git; the queue is workspace-scoped), 25 unit (4 for Up next), 4 e2e.
+- [ ] Mike: queue two prompts behind a running Claude task and watch them go in turn. Try "Run in parallel" in a project.
+
+## Previous milestone: M5a — Sessions survive restarts ✅ (PR #3)
 
 ### Definition of done
 
@@ -104,6 +114,11 @@ Planned with Mike in the 2026-10-20 "where next" session: Phase A (this mileston
 **Not done on purpose:** there's no placeholder `isolation-suite` CI job. A job that passes with zero tests would claim a guarantee we don't have yet (SPEC §0.3). M1 adds the real suite as a required check.
 
 ### Log
+
+#### 2026-10-20 (M5b)
+
+- Installed the build with "From your projects" removed.
+- Built M5b (ADR-024). This completes SPEC §8. Next: M6 (polish and ship: performance budgets, accessibility, onboarding, signed build).
 
 #### 2026-10-20 (M5a)
 

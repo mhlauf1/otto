@@ -3,6 +3,7 @@
 
 use std::collections::HashMap;
 use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 use otto_core::agent::AgentKind;
 use otto_core::pty::PtySession;
@@ -20,6 +21,8 @@ pub struct SessionInfo {
     pub sign_in: bool,
     /// The project the session runs in; `None` means General (the home folder).
     pub project_path: Option<String>,
+    /// A parallel task's branch (M5b); the session runs in that branch's worktree.
+    pub branch: Option<String>,
 }
 
 struct Live {
@@ -27,6 +30,7 @@ struct Live {
     pty: PtySession,
     /// Shell sessions only: their recent output, saved for the next launch.
     scrollback: Option<scrollback::Buffer>,
+    started: Instant,
 }
 
 #[derive(Default)]
@@ -54,6 +58,7 @@ impl Sessions {
                 info,
                 pty,
                 scrollback,
+                started: Instant::now(),
             },
         );
     }
@@ -67,6 +72,15 @@ impl Sessions {
                 Some((l.info.workspace_id.clone(), l.info.id.clone(), text))
             })
             .collect()
+    }
+
+    /// How long a running session has been up.
+    pub fn age(&self, id: &str) -> Option<Duration> {
+        self.lock().get(id).map(|l| l.started.elapsed())
+    }
+
+    pub fn info(&self, id: &str) -> Option<SessionInfo> {
+        self.lock().get(id).map(|l| l.info.clone())
     }
 
     pub fn contains(&self, id: &str) -> bool {

@@ -19,7 +19,10 @@ pub fn bindings_path() -> PathBuf {
 /// and to the generated bindings at the same time.
 pub fn ipc() -> Builder<tauri::Wry> {
     Builder::<tauri::Wry>::new()
-        .events(collect_events![watch::SessionStatusChanged])
+        .events(collect_events![
+            watch::SessionStatusChanged,
+            watch::QueueChanged
+        ])
         .commands(collect_commands![
             commands::app_info,
             commands::list_workspaces,
@@ -50,6 +53,12 @@ pub fn ipc() -> Builder<tauri::Wry> {
             commands::list_paused_sessions,
             commands::dismiss_paused_session,
             commands::resume_paused_session,
+            commands::list_queue,
+            commands::enqueue_prompt,
+            commands::unqueue_prompt,
+            commands::start_parallel_task,
+            commands::list_worktrees,
+            commands::remove_worktree,
             commands::list_sessions,
             commands::claude_setup_inventory,
             commands::import_claude_setup,

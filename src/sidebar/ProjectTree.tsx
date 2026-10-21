@@ -8,7 +8,13 @@ import type {
   SavedSession,
   Workspace,
 } from '../bindings';
-import { groupActions, usePastConversations, usePausedSessions } from '../app/queries';
+import {
+  groupActions,
+  removeWorktree,
+  usePastConversations,
+  usePausedSessions,
+  useWorktrees,
+} from '../app/queries';
 import { NewSessionMenu } from '../sessions/NewSessionMenu';
 import { ago, sessionLabels } from '../sessions/labels';
 import type { LiveSession } from '../sessions/registry';
@@ -164,6 +170,9 @@ export function ProjectTree({
       }}
       onRename={() => {
         setNaming({ kind: 'renameProject', project: p });
+      }}
+      onRemoveWorktree={(id) => {
+        run(() => removeWorktree(ws, id));
       }}
     />
   );
@@ -400,6 +409,7 @@ interface ProjectNodeProps {
   onMove: (groupId: string | null) => void;
   onNewGroup: () => void;
   onRename: () => void;
+  onRemoveWorktree: (id: string) => void;
 }
 
 function ProjectNode({
@@ -418,7 +428,9 @@ function ProjectNode({
   onMove,
   onNewGroup,
   onRename,
+  onRemoveWorktree,
 }: ProjectNodeProps) {
+  const worktrees = (useWorktrees(workspace.id).data ?? []).filter((t) => t.projectPath === p.path);
   const past = useEarlier(workspace.id, p.path, sessions);
   const pausedHere = usePausedIn(p.path);
   const hasChildren = sessions.length > 0 || pausedHere.length > 0 || past.length > 0;
@@ -464,6 +476,33 @@ function ProjectNode({
                 <Menu.Item className={menu.item} onSelect={onRename}>
                   Rename…
                 </Menu.Item>
+                {worktrees.length > 0 ? (
+                  <>
+                    <Menu.Separator className={styles.menuSeparator} />
+                    <Menu.Label className={menu.label}>Parallel worktrees</Menu.Label>
+                    {worktrees.map((t) => (
+                      <Menu.Item
+                        key={t.id}
+                        className={menu.item}
+                        disabled={t.inUse || t.dirty}
+                        onSelect={() => {
+                          onRemoveWorktree(t.id);
+                        }}
+                      >
+                        <span className={menu.text}>
+                          <span>Remove {t.branch}</span>
+                          <span className={menu.detail}>
+                            {t.inUse
+                              ? 'A session is running in it'
+                              : t.dirty
+                                ? 'Has uncommitted changes'
+                                : 'The branch stays'}
+                          </span>
+                        </span>
+                      </Menu.Item>
+                    ))}
+                  </>
+                ) : null}
                 <Menu.Separator className={styles.menuSeparator} />
                 <Menu.Label className={menu.label}>Move {p.name} to</Menu.Label>
                 {groups.map((g) => (
@@ -630,6 +669,11 @@ function SessionList({
               aria-hidden
             />
             <span className={styles.rowName}>{labels.get(s.info.id)}</span>
+            {s.info.branch ? (
+              <span className={styles.branch} title={`Parallel task on ${s.info.branch}`}>
+                {s.info.branch.replace(/^otto\//, '')}
+              </span>
+            ) : null}
             {statusLabel(s) ? (
               <span className={styles.statusLabel} data-state={s.status}>
                 {statusLabel(s)}

@@ -9,6 +9,8 @@ import {
   type DiscoveredRepo,
   type DoctorReport,
   type PastConversation,
+  type QueueItem,
+  type WorktreeInfo,
   type Project,
   type ProjectGroup,
   type Workspace,
@@ -51,6 +53,8 @@ export const queryKeys = {
   pastIn: (workspaceId: string, projectPath: string | undefined) =>
     ['past', workspaceId, projectPath ?? ''] as const,
   paused: (workspaceId: string) => ['paused', workspaceId] as const,
+  queue: (workspaceId: string, sessionId: string) => ['queue', workspaceId, sessionId] as const,
+  worktrees: (workspaceId: string) => ['worktrees', workspaceId] as const,
   knowledge: (workspaceId: string) => ['knowledge', workspaceId] as const,
   note: (workspaceId: string, area: Area, path: string) =>
     ['knowledge', workspaceId, 'note', area, path] as const,
@@ -144,6 +148,37 @@ export function usePausedSessions(workspaceId: string) {
         ? unwrap(await commands.listPausedSessions(workspaceId))
         : (PREVIEW_PAUSED[workspaceId] ?? []),
   });
+}
+
+/** Prompts waiting in a session's "Up next" (M5b). */
+export function useQueue(workspaceId: string, sessionId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.queue(workspaceId, sessionId),
+    enabled,
+    queryFn: async (): Promise<QueueItem[]> =>
+      isTauri() ? unwrap(await commands.listQueue(workspaceId, sessionId)) : [],
+  });
+}
+
+export const queueActions = {
+  add: async (workspaceId: string, sessionId: string, prompt: string): Promise<QueueItem> =>
+    unwrap(await commands.enqueuePrompt(workspaceId, sessionId, prompt)),
+  remove: async (workspaceId: string, itemId: string): Promise<void> => {
+    unwrap(await commands.unqueuePrompt(workspaceId, itemId));
+  },
+};
+
+/** Parallel tasks' worktrees in a workspace. */
+export function useWorktrees(workspaceId: string) {
+  return useQuery({
+    queryKey: queryKeys.worktrees(workspaceId),
+    queryFn: async (): Promise<WorktreeInfo[]> =>
+      isTauri() ? unwrap(await commands.listWorktrees(workspaceId)) : [],
+  });
+}
+
+export async function removeWorktree(workspaceId: string, id: string): Promise<void> {
+  unwrap(await commands.removeWorktree(workspaceId, id));
 }
 
 export async function dismissPausedSession(workspaceId: string, id: string): Promise<void> {

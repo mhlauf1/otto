@@ -18,9 +18,10 @@ use otto_core::pty::{PtyEvent, PtySession};
 use otto_core::repo::{RemotePolicy, RepoRefusal, VerifiedRepo, verify_repo};
 use otto_core::scrollback;
 use otto_core::store::{Project, ProjectGroup, StoreError};
-use otto_core::store::{SavedSession, SessionKind, SessionStatus};
+use otto_core::store::{QueueItem, SavedSession, SessionKind, SessionStatus, Worktree};
 use otto_core::workspace::Workspace;
 use otto_core::workspace::WorkspaceLayout;
+use otto_core::worktree;
 use otto_core::{AppInfo, AppInfoError};
 use serde::Serialize;
 use specta::Type;
@@ -489,6 +490,7 @@ pub async fn open_session(
         title,
         sign_in,
         project_path: in_project.then(|| cwd.display().to_string()),
+        branch: None,
     };
     let detail = serde_json::json!({
         "agent": agent,
@@ -504,6 +506,7 @@ pub async fn open_session(
         &cwd,
         info,
         SessionKind::Work,
+        Extras::default(),
         &detail,
         cols,
         rows,
@@ -531,6 +534,7 @@ async fn spawn_session(
     cwd: &std::path::Path,
     info: SessionInfo,
     kind: SessionKind,
+    extras: Extras,
     detail: &serde_json::Value,
     cols: u16,
     rows: u16,
@@ -541,6 +545,16 @@ async fn spawn_session(
         env.set("OTTO_SESSION", &info.id).map_err(internal)?;
         spec.args
             .extend(agent_events::launch_args(info.agent, layout));
+    }
+    if let Some(prompt) = extras.initial_prompt {
+        // The CLIs take a first prompt as their first argument. A prompt that starts with
+        // "-" would read as an option, so it gets a plain prefix.
+        let prompt = if prompt.starts_with('-') {
+            format!("Task: {prompt}")
+        } else {
+            prompt
+        };
+        spec.args.insert(0, prompt);
     }
     let buffer = (info.agent == AgentKind::Shell && !info.sign_in).then(|| {
         let saved = scrollback::load(layout, &info.id).unwrap_or_default();
@@ -584,6 +598,7 @@ async fn spawn_session(
             cli_session_id: None,
             status: SessionStatus::Idle,
             last_active_at: String::new(),
+            worktree_id: extras.worktree_id,
         };
         state.store.save_session(&saved).await.map_err(internal)?;
     }
@@ -593,6 +608,14 @@ async fn spawn_session(
         .record_event(Some(&ws.id), "session_opened", detail)
         .await;
     Ok(info)
+}
+
+/// What a session starts with besides its launch: a parallel task's worktree and first
+/// prompt (M5b).
+#[derive(Default)]
+struct Extras {
+    worktree_id: Option<String>,
+    initial_prompt: Option<String>,
 }
 
 /// When a session's program exits on its own (or Mike closes it), it's no longer
@@ -678,6 +701,7 @@ pub async fn open_ask(
         },
         sign_in: false,
         project_path: None,
+        branch: None,
     };
     let detail =
         serde_json::json!({ "agent": "claude", "ask": true, "includePrivate": include_private });
@@ -687,7 +711,18 @@ pub async fn open_ask(
         SessionKind::Ask
     };
     spawn_session(
-        &state, &ws, &layout, spec, &cwd, info, kind, &detail, cols, rows, on_event,
+        &state,
+        &ws,
+        &layout,
+        spec,
+        &cwd,
+        info,
+        kind,
+        Extras::default(),
+        &detail,
+        cols,
+        rows,
+        on_event,
     )
     .await
 }
@@ -920,6 +955,43 @@ async fn claude_resume_spec(
     Ok(AgentKind::Claude.launch(&purpose))
 }
 
+/// Where a paused session runs again: Ask in the notes folder, a parallel task in its
+/// worktree, anything else in its project or General. Folders are re-verified.
+async fn paused_cwd(
+    state: &AppState,
+    ws: &Workspace,
+    saved: &SavedSession,
+) -> Result<(PathBuf, Option<String>, Option<Worktree>), CommandError> {
+    if matches!(saved.kind, SessionKind::Ask | SessionKind::AskPrivate) {
+        return Ok((state.knowledge.area_dir(&ws.id, Area::Notes), None, None));
+    }
+    if let Some(id) = &saved.worktree_id {
+        let tree = state
+            .store
+            .worktree(&ws.id, id)
+            .await
+            .map_err(internal)?
+            .ok_or_else(|| {
+                CommandError::Refused(
+                    "This task's worktree was removed, so it can't be resumed.".into(),
+                )
+            })?;
+        // Re-verified like any project: it shares the repo's config and remotes.
+        let repo = verify(
+            state,
+            ws,
+            PathBuf::from(&tree.path),
+            RemotePolicy::AllowLocalOnly,
+        )
+        .await?;
+        let project = Some(tree.project_path.clone());
+        return Ok((PathBuf::from(repo.path), project, Some(tree)));
+    }
+    let (cwd, in_project) = verified_cwd(state, ws, saved.project_path.as_deref()).await?;
+    let project = in_project.then(|| cwd.display().to_string());
+    Ok((cwd, project, None))
+}
+
 /// Pick a paused session back up the way it was opened: Claude with `--resume`, Codex with
 /// `codex resume`, Shell with its saved scrollback. Projects are re-verified.
 #[tauri::command]
@@ -948,11 +1020,7 @@ pub async fn resume_paused_session(
     refresh_instructions(&state, &ws, &layout);
 
     let ask = matches!(saved.kind, SessionKind::Ask | SessionKind::AskPrivate);
-    let (cwd, in_project) = if ask {
-        (state.knowledge.area_dir(&ws.id, Area::Notes), false)
-    } else {
-        verified_cwd(&state, &ws, saved.project_path.as_deref()).await?
-    };
+    let (cwd, project_path, worktree) = paused_cwd(&state, &ws, &saved).await?;
     let work = Purpose::Work {
         claude_session_id: None,
     };
@@ -992,17 +1060,262 @@ pub async fn resume_paused_session(
         agent: saved.agent,
         title: saved.title.clone(),
         sign_in: false,
-        project_path: in_project.then(|| cwd.display().to_string()),
+        project_path,
+        branch: worktree.as_ref().map(|t| t.branch.clone()),
     };
     let detail = serde_json::json!({
         "agent": saved.agent,
         "resumedPaused": true,
         "project": info.project_path,
     });
+    let extras = Extras {
+        worktree_id: saved.worktree_id.clone(),
+        initial_prompt: None,
+    };
     spawn_session(
-        &state, &ws, &layout, spec, &cwd, info, saved.kind, &detail, cols, rows, on_event,
+        &state, &ws, &layout, spec, &cwd, info, saved.kind, extras, &detail, cols, rows, on_event,
     )
     .await
+}
+
+/// Prompts waiting for a session.
+#[tauri::command]
+#[specta::specta]
+pub async fn list_queue(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    session_id: String,
+) -> Result<Vec<QueueItem>, CommandError> {
+    let ws = state.workspace(&workspace_id).await?;
+    state
+        .store
+        .queued(&ws.id, &session_id)
+        .await
+        .map_err(store_error)
+}
+
+/// Add a prompt to "Up next". If the agent is already waiting for a prompt, it goes now.
+#[tauri::command]
+#[specta::specta]
+pub async fn enqueue_prompt(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    workspace_id: String,
+    session_id: String,
+    prompt: String,
+) -> Result<QueueItem, CommandError> {
+    let ws = state.workspace(&workspace_id).await?;
+    let item = state
+        .store
+        .enqueue(&ws.id, &session_id, &prompt)
+        .await
+        .map_err(store_error)?;
+    crate::watch::queue_changed(&app, &ws.id, &session_id);
+    crate::watch::send_next_if_idle(&app, &state, &ws.id, &session_id).await;
+    Ok(item)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn unqueue_prompt(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    workspace_id: String,
+    item_id: String,
+) -> Result<(), CommandError> {
+    let ws = state.workspace(&workspace_id).await?;
+    let session = state
+        .store
+        .unqueue(&ws.id, &item_id)
+        .await
+        .map_err(store_error)?;
+    crate::watch::queue_changed(&app, &ws.id, &session);
+    Ok(())
+}
+
+/// Run a task in parallel (SPEC §8.2): a new worktree of the project on an `otto/…` branch,
+/// with a new session of `agent` started there on `prompt`.
+#[tauri::command]
+#[specta::specta]
+#[allow(clippy::too_many_arguments)]
+pub async fn start_parallel_task(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    project_path: String,
+    agent: AgentKind,
+    prompt: String,
+    cols: u16,
+    rows: u16,
+    on_event: Channel<PtyEvent>,
+) -> Result<SessionInfo, CommandError> {
+    let ws = state.workspace(&workspace_id).await?;
+    let layout = state.paths.workspace(&ws.id);
+    if agent == AgentKind::Shell {
+        return Err(CommandError::Invalid(
+            "Parallel tasks run Claude Code or Codex.".into(),
+        ));
+    }
+    let prompt = prompt.trim().to_owned();
+    if prompt.is_empty() {
+        return Err(CommandError::Invalid("Write the task first.".into()));
+    }
+    let (repo, in_project) = verified_cwd(&state, &ws, Some(&project_path)).await?;
+    if !in_project {
+        return Err(CommandError::Invalid(
+            "Parallel tasks need a project.".into(),
+        ));
+    }
+    refresh_instructions(&state, &ws, &layout);
+
+    let env = IsolatedEnv::build(&ws, &layout, &state.host);
+    let (layout2, repo2, task) = (layout.clone(), repo.clone(), prompt.clone());
+    let made = tauri::async_runtime::spawn_blocking(move || {
+        worktree::create(&env, &layout2, &repo2, &task)
+    })
+    .await
+    .map_err(internal)?
+    .map_err(|e| CommandError::Refused(e.to_string()))?;
+    let tree = Worktree {
+        id: uuid::Uuid::new_v4().to_string(),
+        project_path: repo.display().to_string(),
+        path: made.path.display().to_string(),
+        branch: made.branch.clone(),
+    };
+    state
+        .store
+        .add_worktree(&ws.id, &tree)
+        .await
+        .map_err(internal)?;
+
+    let id = uuid::Uuid::new_v4().to_string();
+    let mut spec = agent.launch(&Purpose::Work {
+        claude_session_id: (agent == AgentKind::Claude).then(|| id.clone()),
+    });
+    if agent == AgentKind::Claude {
+        add_dirs(&mut spec.args, &state.knowledge.session_dirs(&ws.id));
+    }
+    let info = SessionInfo {
+        id,
+        workspace_id: ws.id.to_string(),
+        agent,
+        title: agent.label().to_owned(),
+        sign_in: false,
+        project_path: Some(tree.project_path.clone()),
+        branch: Some(tree.branch.clone()),
+    };
+    let detail = serde_json::json!({ "agent": agent, "parallel": true, "branch": tree.branch });
+    let extras = Extras {
+        worktree_id: Some(tree.id.clone()),
+        initial_prompt: Some(prompt),
+    };
+    spawn_session(
+        &state,
+        &ws,
+        &layout,
+        spec,
+        &made.path,
+        info,
+        SessionKind::Work,
+        extras,
+        &detail,
+        cols,
+        rows,
+        on_event,
+    )
+    .await
+}
+
+/// A worktree, as the sidebar shows it.
+#[derive(Debug, Clone, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct WorktreeInfo {
+    pub id: String,
+    pub project_path: String,
+    pub branch: String,
+    /// Has uncommitted changes (can't be removed until they're committed or discarded).
+    pub dirty: bool,
+    /// A running session uses it.
+    pub in_use: bool,
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn list_worktrees(
+    state: State<'_, AppState>,
+    workspace_id: String,
+) -> Result<Vec<WorktreeInfo>, CommandError> {
+    let ws = state.workspace(&workspace_id).await?;
+    let layout = state.paths.workspace(&ws.id);
+    let trees = state.store.worktrees(&ws.id).await.map_err(internal)?;
+    let open = state.store.open_sessions(&ws.id).await.map_err(internal)?;
+    let in_use: Vec<String> = open
+        .into_iter()
+        .filter(|s| state.sessions.contains(&s.id))
+        .filter_map(|s| s.worktree_id)
+        .collect();
+    let env = IsolatedEnv::build(&ws, &layout, &state.host);
+    tauri::async_runtime::spawn_blocking(move || {
+        trees
+            .into_iter()
+            .map(|t| WorktreeInfo {
+                dirty: worktree::is_dirty(&env, std::path::Path::new(&t.path)).unwrap_or(false),
+                in_use: in_use.contains(&t.id),
+                id: t.id,
+                project_path: t.project_path,
+                branch: t.branch,
+            })
+            .collect()
+    })
+    .await
+    .map_err(internal)
+}
+
+/// Remove a parallel task's worktree. Refused while a session runs in it or it has
+/// uncommitted changes. Its branch stays.
+#[tauri::command]
+#[specta::specta]
+pub async fn remove_worktree(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    id: String,
+) -> Result<(), CommandError> {
+    let ws = state.workspace(&workspace_id).await?;
+    let layout = state.paths.workspace(&ws.id);
+    let tree = state
+        .store
+        .worktree(&ws.id, &id)
+        .await
+        .map_err(internal)?
+        .ok_or_else(|| CommandError::NotFound(id.clone()))?;
+    let running = state
+        .store
+        .open_sessions(&ws.id)
+        .await
+        .map_err(internal)?
+        .into_iter()
+        .any(|s| s.worktree_id.as_deref() == Some(id.as_str()) && state.sessions.contains(&s.id));
+    if running {
+        return Err(CommandError::Refused(
+            "A session is still running in this worktree. Close it first.".into(),
+        ));
+    }
+    let env = IsolatedEnv::build(&ws, &layout, &state.host);
+    let (repo, path) = (PathBuf::from(&tree.project_path), PathBuf::from(&tree.path));
+    tauri::async_runtime::spawn_blocking(move || worktree::remove(&env, &repo, &path))
+        .await
+        .map_err(internal)?
+        .map_err(|e| CommandError::Refused(e.to_string()))?;
+    state
+        .store
+        .forget_worktree(&ws.id, &id)
+        .await
+        .map_err(internal)?;
+    let detail = serde_json::json!({ "branch": tree.branch });
+    let _ = state
+        .store
+        .record_event(Some(&ws.id), "worktree_removed", &detail)
+        .await;
+    Ok(())
 }
 
 /// Sessions still running (for example after the window reloads).

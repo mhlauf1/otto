@@ -394,6 +394,20 @@
   }
 }
 
+/* A parallel task's branch, without the shared "otto/" prefix. */
+.branch {
+  overflow: hidden;
+  max-width: 96px;
+  padding: 0 var(--otto-space-1);
+  border-radius: var(--otto-radius-xs);
+  background: var(--otto-color-fill-hover);
+  color: var(--otto-color-text-secondary);
+  font-family: var(--otto-font-mono);
+  font-size: var(--otto-type-caption-size);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .statusLabel {
   flex-shrink: 0;
   color: var(--otto-color-text-tertiary);

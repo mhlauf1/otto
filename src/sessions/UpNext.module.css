@@ -1,0 +1,165 @@
+/* "Up next": a slim, quiet strip under the terminal. Clearly a list, not a second chat. */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--otto-space-1);
+  padding: var(--otto-space-2) var(--otto-space-1) 0;
+}
+
+.heading {
+  margin: 0;
+  color: var(--otto-color-text-tertiary);
+  font-size: var(--otto-type-caption-size);
+  line-height: var(--otto-type-caption-line);
+  font-weight: var(--otto-type-caption-weight);
+  letter-spacing: var(--otto-type-caption-tracking);
+}
+
+.hint {
+  font-weight: var(--otto-type-body-weight);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--otto-space-0-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: var(--otto-space-2);
+  min-height: 26px;
+  padding: 0 var(--otto-space-1) 0 var(--otto-space-2);
+  border-radius: var(--otto-radius-sm);
+}
+
+.item:hover {
+  background: var(--otto-color-fill-hover);
+}
+
+.number {
+  width: 14px;
+  color: var(--otto-color-text-tertiary);
+  font-size: var(--otto-type-footnote-size);
+  font-variant-numeric: tabular-nums;
+}
+
+.prompt {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.remove {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--otto-radius-xs);
+  background: transparent;
+  color: var(--otto-color-text-tertiary);
+  opacity: 0;
+}
+
+.remove:focus-visible {
+  opacity: 1;
+}
+
+.remove:hover {
+  background: var(--otto-color-fill-selected);
+  color: var(--otto-color-text-primary);
+}
+
+.item:hover .remove {
+  opacity: 1;
+}
+
+.add {
+  align-self: flex-start;
+  padding: var(--otto-space-1) var(--otto-space-2);
+  border: 0;
+  border-radius: var(--otto-radius-sm);
+  background: transparent;
+  color: var(--otto-color-text-secondary);
+  font-size: var(--otto-type-footnote-size);
+}
+
+.add:hover {
+  background: var(--otto-color-fill-hover);
+  color: var(--otto-color-text-primary);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--otto-space-2);
+  padding: var(--otto-space-2);
+  border: 1px solid var(--otto-color-border-subtle);
+  border-radius: var(--otto-radius-md);
+  background: var(--otto-color-surface-raised);
+}
+
+.field {
+  min-height: 44px;
+  max-height: 160px;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--otto-color-text-primary);
+  font: inherit;
+  resize: vertical;
+  user-select: text;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--otto-space-2);
+}
+
+.keys {
+  flex: 1;
+  color: var(--otto-color-text-tertiary);
+  font-size: var(--otto-type-caption-size);
+}
+
+.secondary,
+.primary {
+  padding: var(--otto-space-1) var(--otto-space-3);
+  border-radius: var(--otto-radius-sm);
+  font-size: var(--otto-type-footnote-size);
+  font-weight: var(--otto-type-headline-weight);
+}
+
+.secondary {
+  border: 1px solid var(--otto-color-border-strong);
+  background: transparent;
+  color: var(--otto-color-text-primary);
+}
+
+.primary {
+  border: 0;
+  background: var(--otto-accent);
+  color: var(--otto-color-text-on-accent);
+}
+
+.secondary:disabled,
+.primary:disabled {
+  opacity: 0.5;
+}
+
+.error {
+  margin: 0;
+  color: var(--otto-color-danger);
+  font-size: var(--otto-type-footnote-size);
+}

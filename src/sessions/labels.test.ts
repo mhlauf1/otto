@@ -4,7 +4,15 @@ import type { LiveSession } from './registry';
 
 const session = (id: string, title: string) =>
   ({
-    info: { id, title, workspaceId: 'lauf', agent: 'claude', signIn: false, projectPath: null },
+    info: {
+      id,
+      title,
+      workspaceId: 'lauf',
+      agent: 'claude',
+      signIn: false,
+      projectPath: null,
+      branch: null,
+    },
   }) as unknown as LiveSession;
 
 describe('sessionLabels', () => {
