@@ -2,6 +2,12 @@
 
 Ideas for V2 and later. Nothing here gets built in V1. Newest first.
 
+## From starting Lauf Studio (2026-10-20)
+
+- **Otto-owned Vercel config per workspace:** Otto could set a Vercel config folder per workspace, like it does for Claude, Codex and `gh`, so any tool's Vercel login is isolated by default. For now Lauf Studio scopes it itself with `--global-config`.
+- **Auto-import exported sites:** when Lauf Studio exports or ships a site, register it in Otto under Lauf → Clients automatically.
+- **Onboarding extras** (declined for now): editing GitHub owner lists, per-workspace SSH key setup, adding a third workspace.
+
 ## From the "where next" session (2026-10-20)
 
 - **Chat-style centre view:** a Codex-app-like chat over the agents in headless mode. Parked by Mike. The terminal stays, because a chat view would rebuild approvals, diffs and tools, and drift from the CLIs.

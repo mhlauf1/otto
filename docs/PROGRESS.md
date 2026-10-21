@@ -115,6 +115,11 @@ Planned with Mike in the 2026-10-20 "where next" session: Phase A (this mileston
 
 ### Log
 
+#### 2026-10-20 (M6 parked)
+
+- Mike parked M6 (polish and ship) to start building **Lauf Studio**, a separate Lauf project (`~/Desktop/lauf/dev/lauf-studio`): a section library plus a site builder that exports Next.js sites and ships them to GitHub and Vercel. It runs inside Otto's Lauf workspace, so its GitHub and Vercel steps inherit Lauf's identity and guardrails. Otto's code doesn't change for it.
+- M5 (a and b) is complete. M6 stays next for Otto whenever Mike picks it back up. Onboarding extras (owner-list editing, SSH setup, new workspaces) were declined for now.
+
 #### 2026-10-20 (M5b)
 
 - Installed the build with "From your projects" removed.
