@@ -187,3 +187,35 @@ Mermaid (the diagram library) is large. `await import('mermaid')` fetches it the
 ### Write, then rename
 
 A save writes to a temporary file and then renames it over the note. A rename is all-or-nothing on macOS, so a crash mid-save leaves either the old note or the new one, never half of one.
+
+---
+
+## Chapter 6 — How Otto is built, where things live, what it costs (M5a)
+
+### The shape
+
+Otto is one Mac app with no server. The window is a React website; macOS draws it in a native window instead of a browser tab. Behind it, Rust does what a website can't: real terminals, keeping identities apart, the database. The two talk through typed calls generated from the Rust code (`src/bindings.ts`), so a mismatch fails to compile instead of failing at runtime.
+
+### Where things live
+
+Everything is in `~/Library/Application Support/Otto` (`Otto Dev` for the dev build):
+
+- `otto.db`: one SQLite file (about 128 KB) holding workspaces, projects, groups, names, sessions and an audit log.
+- `knowledge/`: notes as plain Markdown files.
+- `workspaces/<id>/`: each identity's logins, git config, hooks, inbox, and the conversations Claude and Codex write.
+
+### Why SQLite, and why notes are files
+
+SQLite is a full database in a single file, with no server to run. It suits small, structured records that must stay consistent, like which project belongs to which workspace. Notes are words you might open in another editor, so they're plain files, and Time Machine backs them up like anything else.
+
+### Will it bloat? Does it cost?
+
+Your own content grows slowly: tens of MB a year. The real bloat was duplicate Claude installs (ADR-023), now fixed. Otto costs nothing to run: no servers, no cloud. Usage counts against the Claude and ChatGPT plans you already have. A $99/year Apple Developer account is only needed later, for a signed build that auto-updates.
+
+### Hooks: letting the agent tell you
+
+Instead of guessing from terminal text whether Claude is working, Otto asks Claude to run a tiny script at three moments: you sent a prompt, it finished, it needs you. Codex has the same idea, called `notify`. The script just drops a note in a folder, and Otto reads that folder. It's the same pattern as a mailbox: the sender drops a letter and walks away, so the agent never waits on Otto.
+
+### Not counting "quit" as "closed"
+
+When Otto quits, every terminal it started ends too. If Otto treated that like you closing them, nothing would come back. So Otto sets a "quitting" flag first, and sessions that end while it's set stay remembered, and come back paused.

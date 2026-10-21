@@ -3,11 +3,12 @@
 mod commands;
 mod sessions;
 mod state;
+mod watch;
 
 use std::path::{Path, PathBuf};
 
 use specta_typescript::Typescript;
-use tauri_specta::{Builder, collect_commands};
+use tauri_specta::{Builder, collect_commands, collect_events};
 
 /// Where the generated TypeScript bindings live (`src/bindings.ts`).
 pub fn bindings_path() -> PathBuf {
@@ -17,39 +18,44 @@ pub fn bindings_path() -> PathBuf {
 /// The single list of IPC commands. Adding a command here exposes it to the UI
 /// and to the generated bindings at the same time.
 pub fn ipc() -> Builder<tauri::Wry> {
-    Builder::<tauri::Wry>::new().commands(collect_commands![
-        commands::app_info,
-        commands::list_workspaces,
-        commands::run_identity_doctor,
-        commands::register_repo,
-        commands::discover_projects,
-        commands::list_projects,
-        commands::inspect_project,
-        commands::list_project_groups,
-        commands::create_project_group,
-        commands::rename_project_group,
-        commands::delete_project_group,
-        commands::reorder_project_groups,
-        commands::move_project,
-        commands::rename_project,
-        commands::list_past_conversations,
-        commands::open_session,
-        commands::open_ask,
-        commands::list_knowledge,
-        commands::read_note,
-        commands::save_note,
-        commands::create_note,
-        commands::read_knowledge_image,
-        commands::add_knowledge_assets,
-        commands::list_project_docs,
-        commands::read_project_doc,
-        commands::write_session,
-        commands::resize_session,
-        commands::close_session,
-        commands::list_sessions,
-        commands::claude_setup_inventory,
-        commands::import_claude_setup,
-    ])
+    Builder::<tauri::Wry>::new()
+        .events(collect_events![watch::SessionStatusChanged])
+        .commands(collect_commands![
+            commands::app_info,
+            commands::list_workspaces,
+            commands::run_identity_doctor,
+            commands::register_repo,
+            commands::discover_projects,
+            commands::list_projects,
+            commands::inspect_project,
+            commands::list_project_groups,
+            commands::create_project_group,
+            commands::rename_project_group,
+            commands::delete_project_group,
+            commands::reorder_project_groups,
+            commands::move_project,
+            commands::rename_project,
+            commands::list_past_conversations,
+            commands::open_session,
+            commands::open_ask,
+            commands::list_knowledge,
+            commands::read_note,
+            commands::save_note,
+            commands::create_note,
+            commands::read_knowledge_image,
+            commands::add_knowledge_assets,
+            commands::list_project_docs,
+            commands::read_project_doc,
+            commands::write_session,
+            commands::resize_session,
+            commands::close_session,
+            commands::list_paused_sessions,
+            commands::dismiss_paused_session,
+            commands::resume_paused_session,
+            commands::list_sessions,
+            commands::claude_setup_inventory,
+            commands::import_claude_setup,
+        ])
 }
 
 /// Write `src/bindings.ts`.
@@ -80,8 +86,9 @@ pub fn run() {
     }
 
     let ipc = ipc();
-    let result = tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .invoke_handler(ipc.invoke_handler())
         .setup(move |app| {
             ipc.mount_events(app);
@@ -89,13 +96,27 @@ pub fn run() {
             let state = tauri::async_runtime::block_on(state::AppState::start())?;
             tracing::info!(root = %state.paths.root().display(), "Otto started");
             tauri::Manager::manage(app, state);
+            watch::start(app.handle().clone());
             Ok(())
         })
-        .run(tauri::generate_context!());
+        .build(tauri::generate_context!());
 
-    if let Err(err) = result {
-        tracing::error!(%err, "Otto exited with an error");
-        std::process::exit(1);
+    match app {
+        Ok(app) => app.run(|handle, event| {
+            // Quitting must not count as every session ending: they come back paused.
+            if let tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit = event
+                && let Some(state) = tauri::Manager::try_state::<state::AppState>(handle)
+            {
+                state
+                    .quitting
+                    .store(true, std::sync::atomic::Ordering::SeqCst);
+                watch::save_scrollback(&state);
+            }
+        }),
+        Err(err) => {
+            tracing::error!(%err, "Otto exited with an error");
+            std::process::exit(1);
+        }
     }
 }
 

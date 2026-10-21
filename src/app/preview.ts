@@ -4,6 +4,7 @@ import type {
   Project,
   ProjectDocs,
   ProjectGroup,
+  SavedSession,
   Workspace,
 } from '../bindings';
 
@@ -147,6 +148,23 @@ export const PREVIEW_PROJECT_DOCS: Record<string, ProjectDocs[] | undefined> = {
         { path: 'CLAUDE.md', title: 'stoc' },
         { path: 'README.md', title: 'STOC website' },
       ],
+    },
+  ],
+};
+
+/** Preview: one session left open when Otto last quit. */
+export const PREVIEW_PAUSED: Record<string, SavedSession[] | undefined> = {
+  lauf: [
+    {
+      id: '5b0f8f3e-6a51-4f3e-9d5e-2f4c9a1e7b11',
+      workspaceId: 'lauf',
+      agent: 'claude',
+      projectPath: '/preview/stoc',
+      title: 'Claude Code',
+      kind: 'work',
+      cliSessionId: null,
+      status: 'waiting',
+      lastActiveAt: '2026-10-20T21:39:00.000Z',
     },
   ],
 };

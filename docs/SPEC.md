@@ -290,9 +290,24 @@ A list (Notes, Private, From your projects, Assets) sits beside a reader and edi
 
 ## 8. Sessions and queue
 
-- **Resume:** each session stores its CLI session ID and is restored using each CLI's resume flag. Scrollback is saved to disk. *Pulled forward (ADR-019):* earlier Claude conversations are listed under their project, read from the workspace's own Claude config, and resumed with `claude --resume`.
-- **Queue:** each session has a queue of tasks marked parallel or sequential. Sequential tasks wait for the previous one to finish. Parallel tasks start new sessions in the same workspace and repo, using git worktrees to avoid clashes.
-- Each session shows a status of idle, running, waiting for input, done or error, with a native notification when a task finishes or needs Mike.
+### 8.1 Sessions survive restarts (M5a)
+
+- **Remembered:** every work session (not sign-in flows) is saved in `sessions`. It stays `open` until Mike closes it or its program exits by itself. When Otto quits, open sessions stay open and come back **paused**.
+- **Paused, resume on click** (Mike, 2026-10-20). Paused sessions sit under their project with a hollow dot and "Paused", and can be forgotten with ×. Resuming re-verifies the project, then:
+  - Claude runs `--resume <id>`, or starts fresh with the same ID if it was never used.
+  - Codex runs `codex resume <thread>` once Codex has reported its thread.
+  - Shell starts again with its saved scrollback.
+  - Ask sessions get their same folders back.
+- **Scrollback:** saved for Shell only (up to 256 KB each, every 10 s and at quit). Agents redraw their own history when resumed. It's deleted when the session closes.
+- **Status from the agents themselves:** a per-workspace script that Claude (hooks through `--settings`) and Codex (`-c notify=…`) run when they start, finish or need Mike. It drops the event in that workspace's inbox, named by the session's `OTTO_SESSION`. Otto applies an event only to a session of that same workspace. Rows show Working, Needs you, Ended or Paused (never colour alone). A macOS notification fires when an agent finishes or needs Mike and he isn't looking at it.
+- **Housekeeping:**
+  - Closed sessions are forgotten after 30 days.
+  - Identity Doctor results are logged only when they change.
+  - Claude's auto-updater is off inside workspaces, so Mike's own install is the only one. Workspaces' stray Claude downloads are removed unless `claude` still runs from one, and the Identity Doctor warns when it does.
+
+### 8.2 Queue and parallel work (M5b)
+
+- **Queue:** each session has a queue of tasks marked parallel or sequential. A sequential task starts when the agent reports it finished (8.1). Parallel tasks start new sessions in the same workspace and repo, using git worktrees to avoid clashes.
 
 ---
 
@@ -331,7 +346,9 @@ The learning-mode rule: whenever you introduce a new concept (for example, a Rus
 3. **Shell and design pass:** sidebar, workspace switcher, command palette and composer, all built from Mobbin references.
 3.5. **Shape and labels:** the words in §2.1, project groups, sessions nested under projects, the Overview page, a Knowledge placeholder, and removing the composer (ADR-017, ADR-018).
 4. **Knowledge:** knowledge storage and starter notes, generated per-workspace `CLAUDE.md` and `AGENTS.md`, project docs, Ask, the Knowledge view and separation tests (Section 7).
-5. **Persistence and queue:** resume, scrollback, the task queue, worktrees and notifications.
+5. **Persistence and queue**, in two parts:
+   - **5a:** remembered sessions (paused, resume on click), Shell scrollback, agent-reported status and notifications, and housekeeping (§8.1).
+   - **5b:** the task queue and worktrees (§8.2).
 6. **Polish and ship:** performance budgets, accessibility, onboarding, and a signed and notarized build.
 
 Each milestone has a written definition of done in `PROGRESS.md` and finishes with a demo for Mike.
@@ -373,3 +390,4 @@ Section 4's isolation rules enforce this mapping. Only `mikelauf`, with the play
 - 2026-10-20: Approved by Mike in the "where next" planning session. Added the §2.1 glossary and milestone 3.5 (Shape and labels). Project groups are in §5.3. §6.3 now describes the nested sidebar and the Overview page. The composer is removed and the terminal is the only input (§3 item 8, §6.3). The Section 7 Knowledge rewrite is planned for M4 and will be recorded when it lands.
 - 2026-10-20: Asked for by Mike after his stoc session vanished on relaunch: Claude conversation resume is pulled forward from M5 (§8, ADR-019).
 - 2026-10-20: Approved by Mike: Section 7 rewritten as Knowledge (ADR-021). Agents get an index of notes rather than every note, About Mike is shared by every workspace, and repo files are never edited. §6.3 item 5 and milestone 4 were updated to match.
+- 2026-10-20: Approved by Mike: M5 is split into 5a and 5b, and sessions come back paused and resume on a click. §8 rewritten as 8.1 and 8.2, with ADR-022 and ADR-023.

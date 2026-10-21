@@ -395,6 +395,47 @@ fn check_codex(env: &IsolatedEnv) -> Check {
     }
 }
 
+/// Claude's updater, run inside a workspace before 2026-10-20, could re-point the shared
+/// `claude` command into Otto's data folder. Warn, because Mike's own terminal then
+/// depends on Otto's files.
+fn check_claude_install(host: &HostEnv, layout: &WorkspaceLayout) -> Check {
+    let label = "Claude install";
+    let otto_root = layout.root().parent().and_then(std::path::Path::parent);
+    let real = crate::housekeeping::claude_program(host);
+    match (real, otto_root) {
+        (Some(real), Some(root))
+            if root.canonicalize().is_ok_and(|root| real.starts_with(root)) =>
+        {
+            check(
+                "claudeInstall",
+                label,
+                CheckStatus::Warn,
+                format!(
+                    "Your `claude` command runs a copy inside Otto's data folder ({}).",
+                    real.display()
+                ),
+                Some(
+                    "In a normal Terminal (outside Otto), run `claude install` to put Claude back in its usual place.",
+                ),
+            )
+        }
+        (Some(real), _) => check(
+            "claudeInstall",
+            label,
+            CheckStatus::Pass,
+            format!("Sessions use {}.", real.display()),
+            None,
+        ),
+        (None, _) => check(
+            "claudeInstall",
+            label,
+            CheckStatus::Skipped,
+            "Claude Code isn't installed.".into(),
+            None,
+        ),
+    }
+}
+
 /// ADR-008 residual risk R1: agent shells source the real rc files. Warn if they export secrets.
 fn check_rc_files(host: &HostEnv) -> Check {
     let label = "Shell startup files";
@@ -472,6 +513,7 @@ pub fn diagnose(ws: &Workspace, layout: &WorkspaceLayout, host: &HostEnv) -> Doc
         check_claude(&env),
         check_codex(&env),
         check_rc_files(host),
+        check_claude_install(host, layout),
     ];
     let all_green = checks.iter().all(|c| c.status != CheckStatus::Fail);
     let push_allowed = checks

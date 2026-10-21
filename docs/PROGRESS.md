@@ -2,7 +2,19 @@
 
 Newest entries first.
 
-## Current milestone: M4 — Knowledge (built, awaiting Mike's check)
+## Current milestone: M5a — Sessions survive restarts (built, awaiting Mike's check)
+
+### Definition of done
+
+- [x] SPEC §8 split into 8.1 and 8.2, M5 split into 5a and 5b (Mike's approval). ADR-022 and ADR-023.
+- [x] `sessions` table (0006). Open sessions come back paused; click to resume (Claude `--resume`, Codex `codex resume`, Shell with scrollback); × to forget.
+- [x] Agent-reported status (Claude hooks with `--settings`, Codex `notify` with `-c`) through per-workspace inboxes. Working, Needs you and Ended on rows. macOS notifications.
+- [x] Shell scrollback saved (256 KB cap, every 10 s and at quit) and restored.
+- [x] Housekeeping: Claude's auto-updater off in workspaces; stray Claude downloads pruned unless in use; Identity Doctor "Claude install" warning; Doctor logs only changes; closed sessions forgotten after 30 days.
+- [x] Tests: 61 core, 29 isolation (new: `agent_events_only_update_their_own_workspace`, `doctor_warns_when_claude_runs_from_otto_s_data_folder`), 21 unit, 4 e2e. Verified against the real CLIs: Codex accepts `-c notify`, Claude accepts `--settings`, and the running app drained an inbox event.
+- [ ] Mike: run `claude install` in a normal Terminal (fixes the Identity Doctor warning and frees about 1 GB on the next launch). Then in Otto Dev, start a Claude session, quit Otto, reopen, and resume it.
+
+## Previous milestone: M4 — Knowledge ✅ (PR #2)
 
 ### Definition of done
 
@@ -92,6 +104,12 @@ Planned with Mike in the 2026-10-20 "where next" session: Phase A (this mileston
 **Not done on purpose:** there's no placeholder `isolation-suite` CI job. A job that passes with zero tests would claim a guarantee we don't have yet (SPEC §0.3). M1 adds the real suite as a required check.
 
 ### Log
+
+#### 2026-10-20 (M5a)
+
+- Mike asked how Otto is built, where data lives, whether it bloats and what it costs. Measured: the database is 128 KB, but the data folder was 1.5 GB because each workspace had its own Claude download, and Claude's updater had re-pointed `~/.local/bin/claude` into Otto's Lauf folder. Fixed going forward (ADR-023). Mike needs to run `claude install` once.
+- Built M5a (ADR-022). New dependency: `tauri-plugin-notification` 2.5.1, at exact versions.
+- Next: Mike checks M5a, then M5b (queue and worktrees).
 
 #### 2026-10-20 (M4 Knowledge)
 

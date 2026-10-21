@@ -142,4 +142,16 @@ describe('App', () => {
     expect(await screen.findByText('Private: agents don’t read this')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Ask Lauf' })).toBeTruthy();
   });
+
+  it('shows sessions left open at the last quit as Paused, ready to resume', async () => {
+    renderApp();
+    await screen.findByRole('navigation', { name: 'Workspaces' });
+    fireEvent.keyDown(window, { key: '2', code: 'Digit2', metaKey: true });
+    const clients = await screen.findByRole('region', { name: 'Clients' });
+    const paused = await within(clients).findByRole('button', {
+      name: /Claude Code.*Paused/,
+    });
+    expect(paused.getAttribute('title')).toContain('Resume');
+    expect(within(clients).getByRole('button', { name: 'Forget paused Claude Code' })).toBeTruthy();
+  });
 });

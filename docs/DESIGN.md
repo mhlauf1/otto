@@ -214,3 +214,14 @@ Mike found the first layout clashing: the list sat in a bordered card with a sec
 - **The column carries its own header.** "Knowledge" with "On this Mac, never in a repo." and a bordered "+" for a new note. **Ask** and "Include private notes" moved to the foot of the column, like a composer.
 - **Rows** show the title on one line and a snippet clamped to two lines, clipped inside the column (`min-width: 0` all the way down).
 - **The reader header** is a breadcrumb ("Notes / Clients") plus the badge. The note's own title is the one big heading.
+
+## M5a — Session status and paused sessions (2026-10-20)
+
+- **Session rows show their status in words** (never colour alone), with a dot:
+  - **Working:** a breathing accent dot (no motion under Reduce Motion).
+  - **Needs you:** an accent dot with a focus ring, and an accent "Needs you" label.
+  - **Ended:** a grey dot.
+- **Paused** (open when Otto last quit): a hollow accent dot, secondary text, and "Paused". Hovering shows × to forget it. Clicking resumes it where it left off.
+- **Notifications:**
+  - Title "Lauf · stoc · Claude Code", with the agent's own message (for example "Claude needs your permission to use Bash"), else "Finished. Your turn." or "Needs you."
+  - They're sent only when Mike isn't already looking at that session.

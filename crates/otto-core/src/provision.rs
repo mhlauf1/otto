@@ -56,6 +56,8 @@ pub fn provision(workspace: &Workspace, layout: &WorkspaceLayout) -> Result<(), 
         0o700,
     )?;
     write_with_mode(&layout.askpass(), &hooks::askpass(workspace, layout), 0o700)?;
+    let events_dir = crate::agent_events::inbox_dir(layout);
+    crate::agent_events::provision(workspace, layout).map_err(ctx(&events_dir))?;
 
     // Shell sessions read $ZDOTDIR (inside the workspace), never ~/.zshrc. The prompt
     // names the workspace so it's obvious which identity a shell runs as (SPEC §4.5).

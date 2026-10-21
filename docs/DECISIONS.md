@@ -213,3 +213,24 @@ Each ADR records the context, the options, the decision and its consequences. Ne
   - Every path from the UI is relative and is resolved inside one area. `..`, absolute paths and symlinks that leave the area are refused. Project docs can only be read if they appear in that project's doc list.
   - Images go to the UI as `data:` URLs, so the strict CSP still allows no file access. Links in notes don't navigate the window.
 - **Consequences:** Repos are never touched. Each session pays for one small index, not every note. The isolation suite gains `knowledge_feeds_each_workspace_only_its_own_notes`.
+
+## ADR-022 — Sessions survive restarts; agents report their own status
+
+- **Status:** Accepted (2026-10-20, Mike chose paused + resume on click)
+- **Context:** Sessions lived only in memory, so a relaunch lost them from the sidebar. Telling "working" from "needs you" by reading terminal text would be fragile and would break with every CLI release.
+- **Decision:**
+  - A `sessions` table (migration 0006) saves work sessions. A session is closed only when Mike closes it or its program exits by itself. A `quitting` flag, set on `ExitRequested`, keeps Otto's own shutdown from counting as every session ending.
+  - Resume runs each CLI's own resume (`claude --resume`, `codex resume`). A never-used Claude session restarts with its same ID.
+  - Status comes from the agents' own extension points: Claude hooks (`UserPromptSubmit`, `Stop`, `Notification`) passed through `--settings`, and Codex's `notify` passed through `-c`. Mike's settings files are never edited. Both call one per-workspace script. The script checks `OTTO_SESSION` is a UUID, writes only to that workspace's `inbox/`, and never fails the agent. A watcher drains the inboxes every 400 ms and emits a typed `SessionStatusChanged` event.
+  - Scrollback is kept for Shell only, in Rust (so it's saved at quit without the window's help). It's capped at 256 KB and written atomically.
+- **Consequences:** The isolation suite gains `agent_events_only_update_their_own_workspace`. Codex sessions resume only after Codex has reported a thread (after its first turn). Notifications use `tauri-plugin-notification` 2.5.1.
+
+## ADR-023 — One Claude install; workspaces never update it
+
+- **Status:** Accepted (2026-10-20)
+- **Context:** Measured on Mike's Mac, the Otto data folder was 1.5 GB, almost none of it Mike's content. Claude's auto-updater, run inside each workspace, had downloaded its own copy into the workspace's XDG data folder (519 MB each), and had re-pointed `~/.local/bin/claude` into Otto's Lauf folder. Mike's normal terminal was running Claude from Otto's data.
+- **Decision:**
+  - `DISABLE_AUTOUPDATER=1` in every workspace environment. Mike's own terminal keeps Claude updated, and Otto uses that install.
+  - At launch, `housekeeping::prune_stray_claude_versions` removes a workspace's downloads, **unless** the `claude` on the PATH resolves into them.
+  - The Identity Doctor warns ("Claude install") when `claude` runs from Otto's data, and suggests running `claude install` in a normal terminal.
+- **Consequences:** Once Mike runs `claude install`, about 1 GB is freed on the next launch. Codex's own package cache (325 MB) is left alone, because Codex manages it.

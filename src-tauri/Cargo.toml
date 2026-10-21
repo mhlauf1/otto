@@ -23,6 +23,7 @@ specta.workspace = true
 specta-typescript.workspace = true
 tauri = { workspace = true, features = ["macos-private-api"] }
 tauri-plugin-dialog.workspace = true
+tauri-plugin-notification.workspace = true
 tauri-specta.workspace = true
 thiserror.workspace = true
 tokio.workspace = true

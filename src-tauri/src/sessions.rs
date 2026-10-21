@@ -1,11 +1,12 @@
-//! Live terminal sessions, keyed by ID. Sessions are in memory for now; M5 persists
-//! and resumes them.
+//! Live terminal sessions, keyed by ID. The database remembers them across launches
+//! (`otto_core::store`, M5a); this is what's running right now.
 
 use std::collections::HashMap;
 use std::sync::Mutex;
 
 use otto_core::agent::AgentKind;
 use otto_core::pty::PtySession;
+use otto_core::scrollback;
 use serde::Serialize;
 use specta::Type;
 
@@ -24,6 +25,8 @@ pub struct SessionInfo {
 struct Live {
     info: SessionInfo,
     pty: PtySession,
+    /// Shell sessions only: their recent output, saved for the next launch.
+    scrollback: Option<scrollback::Buffer>,
 }
 
 #[derive(Default)]
@@ -39,8 +42,31 @@ impl Sessions {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
-    pub fn insert(&self, info: SessionInfo, pty: PtySession) {
-        self.lock().insert(info.id.clone(), Live { info, pty });
+    pub fn insert(
+        &self,
+        info: SessionInfo,
+        pty: PtySession,
+        scrollback: Option<scrollback::Buffer>,
+    ) {
+        self.lock().insert(
+            info.id.clone(),
+            Live {
+                info,
+                pty,
+                scrollback,
+            },
+        );
+    }
+
+    /// Scrollback that changed since it was last saved: (workspace, session, text).
+    pub fn changed_scrollback(&self) -> Vec<(String, String, String)> {
+        self.lock()
+            .values()
+            .filter_map(|l| {
+                let text = l.scrollback.as_ref()?.take_if_changed()?;
+                Some((l.info.workspace_id.clone(), l.info.id.clone(), text))
+            })
+            .collect()
     }
 
     pub fn contains(&self, id: &str) -> bool {

@@ -162,6 +162,10 @@ impl IsolatedEnv {
         env.put("ANTHROPIC_CONFIG_DIR", p(layout.anthropic_dir()));
         env.put("CLAUDE_CODE_TMPDIR", p(layout.tmp_dir()));
         env.put("CODEX_HOME", p(layout.codex_dir()));
+        // One Claude install, updated by Mike's own terminal. Left on, each workspace's
+        // updater downloaded its own copy (~500 MB each) and re-pointed ~/.local/bin/claude
+        // into Otto's data folder (found 2026-10-20).
+        env.put("DISABLE_AUTOUPDATER", "1".to_owned());
 
         // GitHub CLI: token lives in <ws>/gh/hosts.yml (ADR-005).
         env.put("GH_CONFIG_DIR", p(layout.gh_dir()));
@@ -319,6 +323,13 @@ mod tests {
         let ssh = env.get("GIT_SSH_COMMAND").unwrap();
         assert!(ssh.starts_with("ssh -F none "));
         assert!(ssh.contains("-i '/tmp/Otto Test/workspaces/lauf/ssh/id_ed25519'"));
+    }
+
+    #[test]
+    fn claude_never_updates_itself_inside_a_workspace() {
+        let (ws, layout, host) = fixture();
+        let env = IsolatedEnv::build(&ws, &layout, &host);
+        assert_eq!(env.get("DISABLE_AUTOUPDATER"), Some("1"));
     }
 
     #[test]

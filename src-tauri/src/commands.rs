@@ -6,6 +6,7 @@
 use std::path::PathBuf;
 
 use otto_core::agent::{AgentKind, Purpose};
+use otto_core::agent_events;
 use otto_core::claude_setup::{self, ClaudeSource, SetupItem};
 use otto_core::doctor::{self, DoctorReport};
 use otto_core::env::IsolatedEnv;
@@ -15,7 +16,9 @@ use otto_core::projects::{DiscoveredRepo, classify, find_repos};
 use otto_core::provision::write_doctor_status;
 use otto_core::pty::{PtyEvent, PtySession};
 use otto_core::repo::{RemotePolicy, RepoRefusal, VerifiedRepo, verify_repo};
+use otto_core::scrollback;
 use otto_core::store::{Project, ProjectGroup, StoreError};
+use otto_core::store::{SavedSession, SessionKind, SessionStatus};
 use otto_core::workspace::Workspace;
 use otto_core::workspace::WorkspaceLayout;
 use otto_core::{AppInfo, AppInfoError};
@@ -81,10 +84,19 @@ pub async fn run_identity_doctor(
         "pushAllowed": report.push_allowed,
         "failing": report.checks.iter().filter(|c| c.status == doctor::CheckStatus::Fail).map(|c| &c.id).collect::<Vec<_>>(),
     });
-    let _ = state
+    // Log the verdict only when it changes, so the audit trail doesn't grow with every check.
+    let last = state
         .store
-        .record_event(Some(&ws.id), "identity_doctor", &detail)
-        .await;
+        .last_event_detail(&ws.id, "identity_doctor")
+        .await
+        .ok()
+        .flatten();
+    if last.as_deref() != Some(detail.to_string().as_str()) {
+        let _ = state
+            .store
+            .record_event(Some(&ws.id), "identity_doctor", &detail)
+            .await;
+    }
     Ok(report)
 }
 
@@ -356,6 +368,22 @@ async fn session_cwd(
     Ok(Some(PathBuf::from(path)))
 }
 
+/// Where a work session runs: a project of `ws`, re-verified every time so a token or
+/// foreign remote added since registration is caught (ADR-007), or the home folder.
+async fn verified_cwd(
+    state: &AppState,
+    ws: &Workspace,
+    project_path: Option<&str>,
+) -> Result<(PathBuf, bool), CommandError> {
+    match session_cwd(state, ws, project_path).await? {
+        Some(path) => {
+            let repo = verify(state, ws, path, RemotePolicy::AllowLocalOnly).await?;
+            Ok((PathBuf::from(repo.path), true))
+        }
+        None => Ok((state.host.home.clone(), false)),
+    }
+}
+
 /// Earlier Claude conversations in a project (or General), newest first. Read only from
 /// this workspace's own Claude config, so another workspace's history can't appear.
 #[tauri::command]
@@ -396,15 +424,7 @@ pub async fn open_session(
     let ws = state.workspace(&workspace_id).await?;
     let layout = state.paths.workspace(&ws.id);
 
-    // A project must be registered to *this* workspace, and is re-verified every time:
-    // a token or foreign remote added since registration is caught here (ADR-007).
-    let (cwd, in_project) = match session_cwd(&state, &ws, project_path.as_deref()).await? {
-        Some(path) => {
-            let repo = verify(&state, &ws, path, RemotePolicy::AllowLocalOnly).await?;
-            (PathBuf::from(repo.path), true)
-        }
-        None => (state.host.home.clone(), false),
-    };
+    let (cwd, in_project) = verified_cwd(&state, &ws, project_path.as_deref()).await?;
 
     // A resumed conversation must be one of *this* workspace's, started in *this* folder.
     let resumed = match resume_id {
@@ -477,7 +497,17 @@ pub async fn open_session(
         "resumed": resumed.is_some(),
     });
     spawn_session(
-        &state, &ws, &layout, &spec, &cwd, info, &detail, cols, rows, on_event,
+        &state,
+        &ws,
+        &layout,
+        spec,
+        &cwd,
+        info,
+        SessionKind::Work,
+        &detail,
+        cols,
+        rows,
+        on_event,
     )
     .await
 }
@@ -489,31 +519,104 @@ fn add_dirs(args: &mut Vec<String>, dirs: &[PathBuf]) {
     }
 }
 
-/// Start `spec` in a PTY inside the workspace's isolated environment, keep it, and log it.
+/// Start `spec` in a PTY inside the workspace's isolated environment, remember it, and
+/// log it. Work sessions also get `OTTO_SESSION` and the hook arguments that report their
+/// status (M5a); Shell sessions keep their scrollback.
 #[allow(clippy::too_many_arguments)]
 async fn spawn_session(
     state: &AppState,
     ws: &Workspace,
     layout: &WorkspaceLayout,
-    spec: &otto_core::agent::LaunchSpec,
+    mut spec: otto_core::agent::LaunchSpec,
     cwd: &std::path::Path,
     info: SessionInfo,
+    kind: SessionKind,
     detail: &serde_json::Value,
     cols: u16,
     rows: u16,
     on_event: Channel<PtyEvent>,
 ) -> Result<SessionInfo, CommandError> {
-    let env = IsolatedEnv::build(ws, layout, &state.host);
-    let pty = PtySession::spawn(&env, spec, cwd, cols.max(20), rows.max(5), move |event| {
+    let mut env = IsolatedEnv::build(ws, layout, &state.host);
+    if !info.sign_in {
+        env.set("OTTO_SESSION", &info.id).map_err(internal)?;
+        spec.args
+            .extend(agent_events::launch_args(info.agent, layout));
+    }
+    let buffer = (info.agent == AgentKind::Shell && !info.sign_in).then(|| {
+        let saved = scrollback::load(layout, &info.id).unwrap_or_default();
+        if !saved.is_empty() {
+            let _ = on_event.send(PtyEvent::Data {
+                text: format!(
+                    "{saved}\r\n\x1b[2m[Otto: restored from the last session]\x1b[0m\r\n"
+                ),
+            });
+        }
+        scrollback::Buffer::with(&saved)
+    });
+    let output = buffer.clone();
+    let ended = SessionEnd {
+        store: state.store.clone(),
+        quitting: state.quitting.clone(),
+        layout: layout.clone(),
+        id: info.id.clone(),
+        remembered: !info.sign_in,
+    };
+    let pty = PtySession::spawn(&env, &spec, cwd, cols.max(20), rows.max(5), move |event| {
+        match &event {
+            PtyEvent::Data { text } => {
+                if let Some(b) = &output {
+                    b.push(text);
+                }
+            }
+            PtyEvent::Exit { .. } => ended.run(),
+        }
         let _ = on_event.send(event);
     })
     .map_err(|e| CommandError::Invalid(e.to_string()))?;
-    state.sessions.insert(info.clone(), pty);
+    if !info.sign_in {
+        let saved = SavedSession {
+            id: info.id.clone(),
+            workspace_id: ws.id.to_string(),
+            agent: info.agent,
+            project_path: info.project_path.clone(),
+            title: info.title.clone(),
+            kind,
+            cli_session_id: None,
+            status: SessionStatus::Idle,
+            last_active_at: String::new(),
+        };
+        state.store.save_session(&saved).await.map_err(internal)?;
+    }
+    state.sessions.insert(info.clone(), pty, buffer);
     let _ = state
         .store
         .record_event(Some(&ws.id), "session_opened", detail)
         .await;
     Ok(info)
+}
+
+/// When a session's program exits on its own (or Mike closes it), it's no longer
+/// remembered for the next launch. While Otto itself is quitting nothing changes, so
+/// open sessions come back paused.
+struct SessionEnd {
+    store: otto_core::store::Store,
+    quitting: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    layout: WorkspaceLayout,
+    id: String,
+    remembered: bool,
+}
+
+impl SessionEnd {
+    fn run(&self) {
+        if !self.remembered || self.quitting.load(std::sync::atomic::Ordering::SeqCst) {
+            return;
+        }
+        let (store, layout, id) = (self.store.clone(), self.layout.clone(), self.id.clone());
+        tauri::async_runtime::spawn(async move {
+            let _ = store.close_saved_session(&id).await;
+            scrollback::forget(&layout, &id);
+        });
+    }
 }
 
 /// Rebuild the workspace's generated CLAUDE.md and AGENTS.md. A failure is logged, never
@@ -578,8 +681,13 @@ pub async fn open_ask(
     };
     let detail =
         serde_json::json!({ "agent": "claude", "ask": true, "includePrivate": include_private });
+    let kind = if include_private {
+        SessionKind::AskPrivate
+    } else {
+        SessionKind::Ask
+    };
     spawn_session(
-        &state, &ws, &layout, &spec, &cwd, info, &detail, cols, rows, on_event,
+        &state, &ws, &layout, spec, &cwd, info, kind, &detail, cols, rows, on_event,
     )
     .await
 }
@@ -769,10 +877,183 @@ pub fn resize_session(
         .map_err(|e| CommandError::Invalid(e.to_string()))
 }
 
+/// Close a session for good: kill it, and don't bring it back on the next launch.
 #[tauri::command]
 #[specta::specta]
-pub fn close_session(state: State<'_, AppState>, id: String) -> bool {
-    state.sessions.close(&id)
+pub async fn close_session(state: State<'_, AppState>, id: String) -> Result<bool, CommandError> {
+    let workspace = state
+        .sessions
+        .list()
+        .into_iter()
+        .find(|s| s.id == id)
+        .map(|s| s.workspace_id);
+    let closed = state.sessions.close(&id);
+    state
+        .store
+        .close_saved_session(&id)
+        .await
+        .map_err(internal)?;
+    if let Some(ws) = workspace.and_then(|w| otto_core::workspace::WorkspaceId::parse(&w).ok()) {
+        scrollback::forget(&state.paths.workspace(&ws), &id);
+    }
+    Ok(closed)
+}
+
+/// Sessions that were open when Otto last quit and aren't running now: shown paused.
+#[tauri::command]
+#[specta::specta]
+pub async fn list_paused_sessions(
+    state: State<'_, AppState>,
+    workspace_id: String,
+) -> Result<Vec<SavedSession>, CommandError> {
+    let ws = state.workspace(&workspace_id).await?;
+    Ok(state
+        .store
+        .open_sessions(&ws.id)
+        .await
+        .map_err(internal)?
+        .into_iter()
+        .filter(|s| !state.sessions.contains(&s.id))
+        .collect())
+}
+
+/// Stop remembering a paused session without resuming it.
+#[tauri::command]
+#[specta::specta]
+pub async fn dismiss_paused_session(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    id: String,
+) -> Result<(), CommandError> {
+    let ws = state.workspace(&workspace_id).await?;
+    if state
+        .store
+        .session(&ws.id, &id)
+        .await
+        .map_err(internal)?
+        .is_none()
+    {
+        return Err(CommandError::NotFound(id));
+    }
+    state
+        .store
+        .close_saved_session(&id)
+        .await
+        .map_err(internal)?;
+    scrollback::forget(&state.paths.workspace(&ws.id), &id);
+    Ok(())
+}
+
+/// The Claude launch for a paused session: `--resume` if it has a conversation, else a
+/// fresh start with the same ID (it was opened but never used).
+async fn claude_resume_spec(
+    layout: &WorkspaceLayout,
+    cwd: &std::path::Path,
+    id: &str,
+) -> Result<otto_core::agent::LaunchSpec, CommandError> {
+    let (claude_dir, dir, sid) = (layout.claude_dir(), cwd.to_path_buf(), id.to_owned());
+    let has_history = tauri::async_runtime::spawn_blocking(move || {
+        history::list(&claude_dir, &dir, usize::MAX)
+            .iter()
+            .any(|c| c.id == sid)
+    })
+    .await
+    .map_err(internal)?;
+    let purpose = if has_history {
+        Purpose::Resume {
+            claude_session_id: id.to_owned(),
+        }
+    } else {
+        Purpose::Work {
+            claude_session_id: Some(id.to_owned()),
+        }
+    };
+    Ok(AgentKind::Claude.launch(&purpose))
+}
+
+/// Pick a paused session back up the way it was opened: Claude with `--resume`, Codex with
+/// `codex resume`, Shell with its saved scrollback. Projects are re-verified.
+#[tauri::command]
+#[specta::specta]
+pub async fn resume_paused_session(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    id: String,
+    cols: u16,
+    rows: u16,
+    on_event: Channel<PtyEvent>,
+) -> Result<SessionInfo, CommandError> {
+    let ws = state.workspace(&workspace_id).await?;
+    let layout = state.paths.workspace(&ws.id);
+    let saved = state
+        .store
+        .session(&ws.id, &id)
+        .await
+        .map_err(internal)?
+        .ok_or_else(|| CommandError::NotFound(id.clone()))?;
+    if state.sessions.contains(&saved.id) {
+        return Err(CommandError::Refused(
+            "That session is already open.".into(),
+        ));
+    }
+    refresh_instructions(&state, &ws, &layout);
+
+    let ask = matches!(saved.kind, SessionKind::Ask | SessionKind::AskPrivate);
+    let (cwd, in_project) = if ask {
+        (state.knowledge.area_dir(&ws.id, Area::Notes), false)
+    } else {
+        verified_cwd(&state, &ws, saved.project_path.as_deref()).await?
+    };
+    let work = Purpose::Work {
+        claude_session_id: None,
+    };
+    let mut spec = match saved.agent {
+        AgentKind::Claude => claude_resume_spec(&layout, &cwd, &saved.id).await?,
+        AgentKind::Codex => {
+            let mut spec = AgentKind::Codex.launch(&work);
+            if let Some(thread) = &saved.cli_session_id {
+                spec.args = vec!["resume".into(), thread.clone()];
+            }
+            spec
+        }
+        AgentKind::Shell => AgentKind::Shell.launch(&work),
+    };
+    if saved.agent == AgentKind::Claude {
+        let dirs = if ask {
+            let projects: Vec<PathBuf> = state
+                .store
+                .projects(&ws.id)
+                .await
+                .map_err(internal)?
+                .into_iter()
+                .map(|p| PathBuf::from(p.path))
+                .filter(|p| p.is_dir())
+                .collect();
+            state
+                .knowledge
+                .ask_dirs(&ws.id, &projects, saved.kind == SessionKind::AskPrivate)
+        } else {
+            state.knowledge.session_dirs(&ws.id)
+        };
+        add_dirs(&mut spec.args, &dirs);
+    }
+    let info = SessionInfo {
+        id: saved.id.clone(),
+        workspace_id: ws.id.to_string(),
+        agent: saved.agent,
+        title: saved.title.clone(),
+        sign_in: false,
+        project_path: in_project.then(|| cwd.display().to_string()),
+    };
+    let detail = serde_json::json!({
+        "agent": saved.agent,
+        "resumedPaused": true,
+        "project": info.project_path,
+    });
+    spawn_session(
+        &state, &ws, &layout, spec, &cwd, info, saved.kind, &detail, cols, rows, on_event,
+    )
+    .await
 }
 
 /// Sessions still running (for example after the window reloads).

@@ -6,6 +6,7 @@ import {
   type Area,
   type KnowledgeEntry,
   type ProjectDocs,
+  type SavedSession,
   type DiscoveredRepo,
   type DoctorReport,
   type PastConversation,
@@ -18,6 +19,7 @@ import {
   PREVIEW_KNOWLEDGE,
   PREVIEW_NOTES,
   PREVIEW_PAST,
+  PREVIEW_PAUSED,
   PREVIEW_PROJECT_DOCS,
   PREVIEW_PROJECTS,
   PREVIEW_WORKSPACES,
@@ -50,6 +52,7 @@ export const queryKeys = {
   past: (workspaceId: string) => ['past', workspaceId] as const,
   pastIn: (workspaceId: string, projectPath: string | undefined) =>
     ['past', workspaceId, projectPath ?? ''] as const,
+  paused: (workspaceId: string) => ['paused', workspaceId] as const,
   knowledge: (workspaceId: string) => ['knowledge', workspaceId] as const,
   note: (workspaceId: string, area: Area, path: string) =>
     ['knowledge', workspaceId, 'note', area, path] as const,
@@ -135,6 +138,21 @@ export function usePastConversations(workspaceId: string, projectPath: string | 
         ? unwrap(await commands.listPastConversations(workspaceId, projectPath ?? null))
         : (PREVIEW_PAST[projectPath ?? ''] ?? []),
   });
+}
+
+/** Sessions open when Otto last quit, not running now: shown paused, resumed on click. */
+export function usePausedSessions(workspaceId: string) {
+  return useQuery({
+    queryKey: queryKeys.paused(workspaceId),
+    queryFn: async (): Promise<SavedSession[]> =>
+      isTauri()
+        ? unwrap(await commands.listPausedSessions(workspaceId))
+        : (PREVIEW_PAUSED[workspaceId] ?? []),
+  });
+}
+
+export async function dismissPausedSession(workspaceId: string, id: string): Promise<void> {
+  unwrap(await commands.dismissPausedSession(workspaceId, id));
 }
 
 /** Notes, private notes, assets and About Mike for one workspace. */
