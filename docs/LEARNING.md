@@ -131,3 +131,31 @@ When you paste into a terminal, the terminal wraps the text in invisible markers
 ### The React Compiler lint
 
 `react-hooks` now enforces "don't mutate during render". The palette first tracked "last group seen" in a variable reassigned during rendering. The fix computes headings ahead of time in `useMemo`, so rendering stays a pure function of state.
+
+---
+
+## Chapter 4 — Shape and labels (M3.5)
+
+### Composite foreign keys
+
+A normal foreign key says "this column must match a row over there". A **composite** one matches two columns at once. Otto's `repos (group_id, workspace_id)` must match a `project_groups (id, workspace_id)` row, so a project can only sit in a group with the same workspace. The database itself refuses anything else. That backs up the Rust checks instead of relying on them.
+
+### Rebuilding a table in SQLite
+
+SQLite can't add a constraint to an existing table. To add one, a migration creates `repos_new` with the constraint, copies the rows across, drops the old table and renames the new one. Migration 0004 does this, and a test replays it on an "old install" to prove projects survive.
+
+### Remembering layout with `persist`
+
+Zustand's `persist` middleware saves chosen parts of a store to the webview's local storage and reloads them at launch. Otto saves only layout: the selected project, collapsed rows and the current page. If storage is empty or blocked, Otto falls back to defaults, so nothing important depends on it.
+
+### Where Claude keeps conversations
+
+Claude Code writes every conversation to a `.jsonl` file (one JSON object per line) under `projects/` in its config folder. The folder is named after the working directory with every symbol turned into `-`. Each Otto workspace has its own config folder, so its history is separate by construction. Otto only reads these files, and `claude --resume <id>` picks a conversation up again.
+
+### Adding a column is the easy migration
+
+Migration 0004 had to rebuild a table to add a constraint, but 0005 only adds a nullable column (`display_name`), which SQLite does in place with `ALTER TABLE … ADD COLUMN`. NULL means "no name chosen", so every existing project keeps showing its folder name with no data to fill in.
+
+### Dev build vs installed app
+
+`pnpm dev` runs Otto straight from the code. The UI hot-reloads like a website on localhost, and Rust changes rebuild and reopen the window. `pnpm build` packs everything into a standalone `Otto.app`. Debug builds compile with `debug_assertions` on, so Otto uses that switch to pick the "Otto Dev" data folder. The two can't share or break each other's data.

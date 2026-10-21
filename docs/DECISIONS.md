@@ -160,3 +160,43 @@ Each ADR records the context, the options, the decision and its consequences. Ne
   - Never offered: `.credentials.json`, history, sessions, projects, telemetry, `oauthAccount`, or account-synced skills (each workspace's own login syncs those).
   - MCP servers or settings carrying headers or env get a visible warning, because copying them copies that credential.
 - **Consequences:** Updates to `~/.claude` don't flow into workspaces automatically. Re-import to refresh.
+
+## ADR-017 — Project groups, and sessions nested under projects
+
+- **Status:** Accepted (2026-10-20, chosen by Mike)
+- **Context:** The sidebar had three flat lists (Workspaces, Projects, Sessions), so nothing showed which project a session ran in. "Home" (no session selected) and "No project (home folder)" (start in `$HOME`) sounded alike but meant different things. Lauf also mixes client sites with studio and personal work under one identity.
+- **Decision:**
+  - The sidebar goes workspace switcher → Overview and Knowledge → groups → projects → sessions → General. Each session is listed under the project it runs in. "Home" became **Overview**, and "No project" became **General**.
+  - Groups live **inside** a workspace (migration 0004, `project_groups`). They aren't extra workspaces, because Studio and Personal work uses the same `mhlauf1` identity. Lauf starts with Clients, Studio and Personal; Playbook starts with none.
+  - The database enforces isolation itself. `repos (group_id, workspace_id)` is a composite foreign key to `project_groups (id, workspace_id)`, so a project can't sit in another workspace's group even if Otto had a bug. Every store method also filters by workspace. The isolation suite covers both (`project_groups_never_cross_workspaces`).
+  - Session titles drop the project ("Claude Code", not "Claude Code · stoc") because the parent row already shows it. Repeats are numbered ("Claude Code 2").
+  - Sidebar layout choices (selected project, collapsed rows, current page) persist in the webview's local storage. They are layout only, never identity.
+  - Projects can have a name Mike chooses ("Brady Digital Consulting"), stored as `repos.display_name` (migration 0005). Only Otto's label changes; the folder, the repo and isolation checks still use the path.
+- **Consequences:** The tree gets most useful once M5 keeps sessions across relaunches. Deleting a group keeps its projects, ungrouped.
+
+## ADR-018 — One input: the composer is removed
+
+- **Status:** Accepted (2026-10-20, chosen by Mike)
+- **Context:** The on-demand composer (⌘L) was only a bigger text box that pasted into the agent's own `❯` prompt. Two places to type looked like two chats, and Mike found it confusing.
+- **Decision:** Remove the composer (`src/composer/`, the title-bar button, ⌘L). The terminal is the only input, and Wispr Flow dictates straight into it.
+- **Consequences:** The queue (M5) needs its own entry point, which replaces the old ⌥↵ plan. A dictation helper is in the parking lot in case dictating into the terminal proves painful.
+
+## ADR-019 — Resume earlier Claude conversations (pulled forward from M5)
+
+- **Status:** Accepted (2026-10-20, asked for by Mike)
+- **Context:** Otto keeps sessions only in memory, so relaunching Otto ended Mike's stoc session and the sidebar forgot it. Claude Code had already saved the whole conversation inside the Lauf workspace's own config dir.
+- **Decision:**
+  - Otto reads Claude's own record, `<workspace>/claude/projects/<encoded folder>/<id>.jsonl`, rather than keeping a copy. Each project (and General) lists its earlier conversations under its live sessions, newest first, titled with Claude's AI title or the first prompt.
+  - Clicking one runs `claude --resume <id>` in that folder, inside the workspace. The same conversation continues; Claude only forks when asked.
+  - Isolation: history comes only from that workspace's `CLAUDE_CONFIG_DIR`, for a project registered to it. A resume ID must be a UUID that appears in that list, and an ID that's already open is refused. Tested in `past_conversations_never_cross_workspaces`.
+- **Consequences:** Codex history and scrollback restore stay in M5. Sessions are still in memory, but nothing is lost when Otto quits, because each conversation is one click away.
+
+## ADR-020 — Otto Dev and Otto.app keep separate data
+
+- **Status:** Accepted (2026-10-20, chosen by Mike)
+- **Context:** The dev build and the installed app shared `~/Library/Application Support/Otto`. Running both at once clashed. A dev migration (such as 0004) left the older installed app unable to open the database. And when a Rust change restarted the dev window, it closed Mike's working terminals. Updating the installed app meant hand-typing `rm -rf` and `ditto`.
+- **Decision:**
+  - Debug builds (`pnpm dev`) use `Otto Dev` as the data folder, and `tauri.dev.conf.json` gives them their own name and bundle ID (`co.lauf.otto.dev`). The sidebar shows a "Dev" tag.
+  - Release builds keep `Otto` and `co.lauf.otto`.
+  - `pnpm app:install` builds only the `.app` (skipping the `.dmg`), quits the installed Otto through AppleScript, swaps the bundle and reopens it.
+- **Consequences:** Otto Dev has its own workspaces, logins, projects and history, so Mike signs in once there. Isolation is unchanged: each build still isolates its workspaces from each other. Self-updating (the Tauri updater) waits for a signed build in M6.

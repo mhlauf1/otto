@@ -2,6 +2,15 @@
 
 Ideas for V2 and later. Nothing here gets built in V1. Newest first.
 
+## From the "where next" session (2026-10-20)
+
+- **Chat-style centre view:** a Codex-app-like chat over the agents in headless mode. Parked by Mike. The terminal stays, because a chat view would rebuild approvals, diffs and tools, and drift from the CLIs.
+- **Dictation helper:** only if dictating into the terminal proves painful, now that the composer is gone.
+- **"Save to Knowledge":** at the end of a session, Claude drafts a note from what was learned (for example, a client's update history) for Mike to approve.
+- **Per-project notes:** for example, `notes/clients/stoc.md`, linked to its project and shown in the project header.
+- **Playbook Core MCP in Playbook only:** wire the Playbook Core MCP server into the Playbook workspace's Claude setup and never Lauf's. The Claude-setup import can already do this per workspace.
+- **Session rename** and drag-to-reorder for projects and groups.
+
 ## From SPEC §12 (2026-10-20)
 
 - **Scheduled runs:** headless agent runs (`claude -p`, `codex exec`) triggered by launchd at set times (for example 8am). Missed jobs run on wake. A queue that runs when Otto launches.
