@@ -273,6 +273,10 @@ fn merge_key(target: &mut Value, section: &str, key: &str, entry: Value) {
     object(section).insert(key.to_owned(), entry);
 }
 
+/// Mike's imported `CLAUDE.md`. Otto owns the workspace's `CLAUDE.md` and includes this
+/// file in it (ADR-021).
+const USER_MD: &str = "CLAUDE.user.md";
+
 /// Copy the chosen items into `layout`'s Claude config dir. Returns the ids imported.
 ///
 /// # Errors
@@ -295,7 +299,7 @@ pub fn import(
             return Err(SetupError::Unknown(id.clone()));
         }
         match kind {
-            "instructions" => copy_tree(&source.dir.join("CLAUDE.md"), &dest.join("CLAUDE.md"))?,
+            "instructions" => copy_tree(&source.dir.join("CLAUDE.md"), &dest.join(USER_MD))?,
             "skills" | "agents" | "commands" => {
                 let from = source.dir.join(kind).join(name);
                 if !from.exists() {

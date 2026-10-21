@@ -10,12 +10,14 @@ use otto_core::claude_setup::{self, ClaudeSource, SetupItem};
 use otto_core::doctor::{self, DoctorReport};
 use otto_core::env::IsolatedEnv;
 use otto_core::history::{self, PastConversation};
+use otto_core::knowledge::{self, Area, KnowledgeEntry, KnowledgeError, ProjectDoc};
 use otto_core::projects::{DiscoveredRepo, classify, find_repos};
 use otto_core::provision::write_doctor_status;
 use otto_core::pty::{PtyEvent, PtySession};
 use otto_core::repo::{RemotePolicy, RepoRefusal, VerifiedRepo, verify_repo};
 use otto_core::store::{Project, ProjectGroup, StoreError};
 use otto_core::workspace::Workspace;
+use otto_core::workspace::WorkspaceLayout;
 use otto_core::{AppInfo, AppInfoError};
 use serde::Serialize;
 use specta::Type;
@@ -435,7 +437,8 @@ pub async fn open_session(
         None => None,
     };
 
-    let env = IsolatedEnv::build(&ws, &layout, &state.host);
+    // Notes saved outside Otto (for example by Ask) reach new sessions too.
+    refresh_instructions(&state, &ws, &layout);
     let id = resumed
         .as_ref()
         .map_or_else(|| uuid::Uuid::new_v4().to_string(), |c| c.id.clone());
@@ -448,11 +451,11 @@ pub async fn open_session(
             claude_session_id: (agent == AgentKind::Claude).then(|| id.clone()),
         },
     };
-    let spec = agent.launch(&purpose);
-    let pty = PtySession::spawn(&env, &spec, &cwd, cols.max(20), rows.max(5), move |event| {
-        let _ = on_event.send(event);
-    })
-    .map_err(|e| CommandError::Invalid(e.to_string()))?;
+    let mut spec = agent.launch(&purpose);
+    if agent == AgentKind::Claude && !sign_in {
+        // Its own workspace's notes and About Mike, so the index in CLAUDE.md can be followed.
+        add_dirs(&mut spec.args, &state.knowledge.session_dirs(&ws.id));
+    }
     // The sidebar shows a session under its project, so the title is just the agent.
     let title = match (&resumed, sign_in) {
         (_, true) => format!("Sign in · {}", agent.label()),
@@ -467,18 +470,273 @@ pub async fn open_session(
         sign_in,
         project_path: in_project.then(|| cwd.display().to_string()),
     };
-    state.sessions.insert(info.clone(), pty);
     let detail = serde_json::json!({
         "agent": agent,
         "signIn": sign_in,
         "project": info.project_path,
         "resumed": resumed.is_some(),
     });
+    spawn_session(
+        &state, &ws, &layout, &spec, &cwd, info, &detail, cols, rows, on_event,
+    )
+    .await
+}
+
+fn add_dirs(args: &mut Vec<String>, dirs: &[PathBuf]) {
+    for dir in dirs {
+        args.push("--add-dir".into());
+        args.push(dir.display().to_string());
+    }
+}
+
+/// Start `spec` in a PTY inside the workspace's isolated environment, keep it, and log it.
+#[allow(clippy::too_many_arguments)]
+async fn spawn_session(
+    state: &AppState,
+    ws: &Workspace,
+    layout: &WorkspaceLayout,
+    spec: &otto_core::agent::LaunchSpec,
+    cwd: &std::path::Path,
+    info: SessionInfo,
+    detail: &serde_json::Value,
+    cols: u16,
+    rows: u16,
+    on_event: Channel<PtyEvent>,
+) -> Result<SessionInfo, CommandError> {
+    let env = IsolatedEnv::build(ws, layout, &state.host);
+    let pty = PtySession::spawn(&env, spec, cwd, cols.max(20), rows.max(5), move |event| {
+        let _ = on_event.send(event);
+    })
+    .map_err(|e| CommandError::Invalid(e.to_string()))?;
+    state.sessions.insert(info.clone(), pty);
     let _ = state
         .store
-        .record_event(Some(&ws.id), "session_opened", &detail)
+        .record_event(Some(&ws.id), "session_opened", detail)
         .await;
     Ok(info)
+}
+
+/// Rebuild the workspace's generated CLAUDE.md and AGENTS.md. A failure is logged, never
+/// fatal: a session without fresh notes is better than no session.
+fn refresh_instructions(state: &AppState, ws: &Workspace, layout: &WorkspaceLayout) {
+    if let Err(err) = knowledge::write_instructions(&state.knowledge, ws, layout) {
+        tracing::warn!(workspace = %ws.id, %err, "couldn't refresh instruction files");
+    }
+}
+
+fn knowledge_error(e: KnowledgeError) -> CommandError {
+    match e {
+        KnowledgeError::Io(io) => internal(io),
+        other => CommandError::Refused(other.to_string()),
+    }
+}
+
+/// "Ask": Claude Code in the workspace's notes folder, able to open its projects and About
+/// Mike, and `private/` only with `include_private` (SPEC §7.5).
+#[tauri::command]
+#[specta::specta]
+pub async fn open_ask(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    include_private: bool,
+    cols: u16,
+    rows: u16,
+    on_event: Channel<PtyEvent>,
+) -> Result<SessionInfo, CommandError> {
+    let ws = state.workspace(&workspace_id).await?;
+    let layout = state.paths.workspace(&ws.id);
+    refresh_instructions(&state, &ws, &layout);
+    let projects: Vec<PathBuf> = state
+        .store
+        .projects(&ws.id)
+        .await
+        .map_err(internal)?
+        .into_iter()
+        .map(|p| PathBuf::from(p.path))
+        .filter(|p| p.is_dir())
+        .collect();
+    let cwd = state.knowledge.area_dir(&ws.id, Area::Notes);
+    let id = uuid::Uuid::new_v4().to_string();
+    let mut spec = AgentKind::Claude.launch(&Purpose::Work {
+        claude_session_id: Some(id.clone()),
+    });
+    add_dirs(
+        &mut spec.args,
+        &state.knowledge.ask_dirs(&ws.id, &projects, include_private),
+    );
+    let info = SessionInfo {
+        id,
+        workspace_id: ws.id.to_string(),
+        agent: AgentKind::Claude,
+        title: if include_private {
+            format!("Ask {} · with private", ws.name)
+        } else {
+            format!("Ask {}", ws.name)
+        },
+        sign_in: false,
+        project_path: None,
+    };
+    let detail =
+        serde_json::json!({ "agent": "claude", "ask": true, "includePrivate": include_private });
+    spawn_session(
+        &state, &ws, &layout, &spec, &cwd, info, &detail, cols, rows, on_event,
+    )
+    .await
+}
+
+/// Everything in the workspace's knowledge, plus About Mike.
+#[tauri::command]
+#[specta::specta]
+pub async fn list_knowledge(
+    state: State<'_, AppState>,
+    workspace_id: String,
+) -> Result<Vec<KnowledgeEntry>, CommandError> {
+    let ws = state.workspace(&workspace_id).await?;
+    let k = state.knowledge.clone();
+    tauri::async_runtime::spawn_blocking(move || knowledge::list(&k, &ws.id))
+        .await
+        .map_err(internal)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn read_note(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    area: Area,
+    path: String,
+) -> Result<String, CommandError> {
+    let ws = state.workspace(&workspace_id).await?;
+    knowledge::read_note(&state.knowledge, &ws.id, area, &path).map_err(knowledge_error)
+}
+
+/// Save a note, then rebuild the workspace's instruction files so new sessions see it.
+#[tauri::command]
+#[specta::specta]
+pub async fn save_note(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    area: Area,
+    path: String,
+    content: String,
+) -> Result<(), CommandError> {
+    let ws = state.workspace(&workspace_id).await?;
+    knowledge::save_note(&state.knowledge, &ws.id, area, &path, &content)
+        .map_err(knowledge_error)?;
+    if area == Area::Global {
+        // About Mike is shared, so every workspace's files change.
+        for other in state.store.workspaces().await.map_err(internal)? {
+            refresh_instructions(&state, &other, &state.paths.workspace(&other.id));
+        }
+    } else {
+        refresh_instructions(&state, &ws, &state.paths.workspace(&ws.id));
+    }
+    Ok(())
+}
+
+/// Create a note from a title; returns its path.
+#[tauri::command]
+#[specta::specta]
+pub async fn create_note(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    area: Area,
+    title: String,
+) -> Result<String, CommandError> {
+    let ws = state.workspace(&workspace_id).await?;
+    let path =
+        knowledge::create_note(&state.knowledge, &ws.id, area, &title).map_err(knowledge_error)?;
+    refresh_instructions(&state, &ws, &state.paths.workspace(&ws.id));
+    Ok(path)
+}
+
+/// An image from the workspace's knowledge, as a `data:` URL.
+#[tauri::command]
+#[specta::specta]
+pub async fn read_knowledge_image(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    area: Area,
+    path: String,
+) -> Result<String, CommandError> {
+    let ws = state.workspace(&workspace_id).await?;
+    let k = state.knowledge.clone();
+    tauri::async_runtime::spawn_blocking(move || knowledge::image_data_url(&k, &ws.id, area, &path))
+        .await
+        .map_err(internal)?
+        .map_err(knowledge_error)
+}
+
+/// Copy images Mike picked into the workspace's assets. Returns their asset paths.
+#[tauri::command]
+#[specta::specta]
+pub async fn add_knowledge_assets(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    files: Vec<String>,
+) -> Result<Vec<String>, CommandError> {
+    let ws = state.workspace(&workspace_id).await?;
+    let k = state.knowledge.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        files
+            .iter()
+            .map(|f| knowledge::add_asset(&k, &ws.id, std::path::Path::new(f)))
+            .collect::<Result<Vec<_>, _>>()
+    })
+    .await
+    .map_err(internal)?
+    .map_err(knowledge_error)
+}
+
+/// One project's docs, for Knowledge → From your projects.
+#[derive(Debug, Clone, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectDocs {
+    pub project_path: String,
+    pub project_name: String,
+    pub docs: Vec<ProjectDoc>,
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn list_project_docs(
+    state: State<'_, AppState>,
+    workspace_id: String,
+) -> Result<Vec<ProjectDocs>, CommandError> {
+    let ws = state.workspace(&workspace_id).await?;
+    let projects = state.store.projects(&ws.id).await.map_err(internal)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        projects
+            .into_iter()
+            .map(|p| ProjectDocs {
+                docs: knowledge::project_docs(std::path::Path::new(&p.path)),
+                project_path: p.path,
+                project_name: p.name,
+            })
+            .filter(|p| !p.docs.is_empty())
+            .collect()
+    })
+    .await
+    .map_err(internal)
+}
+
+/// Read one doc from one of the workspace's own projects.
+#[tauri::command]
+#[specta::specta]
+pub async fn read_project_doc(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    project_path: String,
+    path: String,
+) -> Result<String, CommandError> {
+    let ws = state.workspace(&workspace_id).await?;
+    let root = session_cwd(&state, &ws, Some(&project_path))
+        .await?
+        .ok_or_else(|| CommandError::Invalid("No project given.".into()))?;
+    tauri::async_runtime::spawn_blocking(move || knowledge::read_project_doc(&root, &path))
+        .await
+        .map_err(internal)?
+        .map_err(knowledge_error)
 }
 
 /// Keystrokes, paste and dictation all arrive here.
@@ -549,6 +807,7 @@ pub async fn import_claude_setup(
             .await
             .map_err(internal)?
             .map_err(|e| CommandError::Invalid(e.to_string()))?;
+    refresh_instructions(&state, &ws, &state.paths.workspace(&ws.id));
     let detail = serde_json::json!({ "items": done });
     let _ = state
         .store

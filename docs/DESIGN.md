@@ -182,3 +182,35 @@ Mike still found the composer confusing after the M3 revision, and couldn't tell
 - **Empty groups offer an action.** "+ Add a project" replaces the "No projects yet. Use ··· …" hint.
 - **Names, not folders.** Rename a project from its ··· menu. The tooltip still shows the folder name.
 - **Chevron:** a drawn SVG that rotates, replacing the ▸ text glyph, which rendered like a dot at caption size.
+
+## M4 — Knowledge (2026-10-20)
+
+### Mobbin references
+
+| Reference                                                                                               | What Otto takes from it                                                                                                                                            |
+| ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [hilos — docs with "Agents read this"](https://mobbin.com/screens/3426d6f0-cef4-4139-ada2-95a6cb0e9ead) | A docs list beside the document, plus a plain label saying whether agents read it. This became the "Agents read this" and "Private: agents don't read this" badges |
+| [Cofounder — Preview and Source](https://mobbin.com/screens/8b26b489-9c60-4b6a-984a-e796e271bfc7)       | A two-way toggle above the document. This became Read and Edit, with Markdown source in Edit                                                                       |
+| [Obvious — notes list](https://mobbin.com/screens/a65b9010-7f2d-4a52-995c-fdb9d731f9d6)                 | List rows with a title plus a one-line snippet, which Otto takes from each note's first sentence                                                                   |
+| [Evernote — notes beside a note](https://mobbin.com/screens/77b58346-67f9-4f5d-bd8c-4e2c837841ce)       | A middle list with the selected note filling the rest                                                                                                              |
+| [Lightfield — record notes](https://mobbin.com/screens/ef271621-2ea1-4bc8-a501-dbfe9ac56ef8)            | A calm reading column with properties above the body                                                                                                               |
+
+### What was built
+
+- **Page:** a "Knowledge" title with "What Lauf's agents know. Kept on this Mac, never in a repo." On the right sit "Include private" and an accent-filled **Ask Lauf** button.
+- **List (260px):** "+ New note", then Shared (About Mike), Notes ("Every session gets an index of these"), Private (lock icon and "+"), From your projects (folding per project) and Assets ("+" adds images).
+- **Reader:** the title, an area badge (the accent-tinted "Agents read this" for notes), a save status, and a Read/Edit segmented control. Read renders GitHub Markdown, with note headings one level below the page's h1. Mermaid diagrams load only when needed and follow light or dark. Edit is a plain monospace field that saves 600 ms after typing stops.
+- **Assets** show the image and a copyable `![name](../assets/name)` snippet for using it in a note.
+
+### Design QA
+
+`pnpm test:e2e` writes `knowledge-{light,dark}.png` and waits for the diagram to draw. The first pass matched Mermaid's off-screen measuring element, so the screenshot caught "Drawing diagram…". The test now waits for the SVG inside the reader.
+
+### Rework after Mike's first look (2026-10-20)
+
+Mike found the first layout clashing: the list sat in a bordered card with a second grey inside the page, and snippets ran out of the column.
+
+- **One flat surface.** There's no card: the list column and the reader sit directly on the page, split by a single hairline (Evernote, Obvious).
+- **The column carries its own header.** "Knowledge" with "On this Mac, never in a repo." and a bordered "+" for a new note. **Ask** and "Include private notes" moved to the foot of the column, like a composer.
+- **Rows** show the title on one line and a snippet clamped to two lines, clipped inside the column (`min-width: 0` all the way down).
+- **The reader header** is a breadcrumb ("Notes / Clients") plus the badge. The note's own title is the one big heading.

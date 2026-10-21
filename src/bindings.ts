@@ -48,6 +48,25 @@ export const commands = {
 	 *  Claude conversation from this workspace and folder.
 	 */
 	openSession: (workspaceId: string, agent: AgentKind, signIn: boolean, projectPath: string | null, resumeId: string | null, cols: number, rows: number, onEvent: Channel<PtyEvent>) => typedError<SessionInfo, CommandError>(__TAURI_INVOKE("open_session", { workspaceId, agent, signIn, projectPath, resumeId, cols, rows, onEvent })),
+	/**
+	 *  "Ask": Claude Code in the workspace's notes folder, able to open its projects and About
+	 *  Mike, and `private/` only with `include_private` (SPEC §7.5).
+	 */
+	openAsk: (workspaceId: string, includePrivate: boolean, cols: number, rows: number, onEvent: Channel<PtyEvent>) => typedError<SessionInfo, CommandError>(__TAURI_INVOKE("open_ask", { workspaceId, includePrivate, cols, rows, onEvent })),
+	/**  Everything in the workspace's knowledge, plus About Mike. */
+	listKnowledge: (workspaceId: string) => typedError<KnowledgeEntry[], CommandError>(__TAURI_INVOKE("list_knowledge", { workspaceId })),
+	readNote: (workspaceId: string, area: Area, path: string) => typedError<string, CommandError>(__TAURI_INVOKE("read_note", { workspaceId, area, path })),
+	/**  Save a note, then rebuild the workspace's instruction files so new sessions see it. */
+	saveNote: (workspaceId: string, area: Area, path: string, content: string) => typedError<null, CommandError>(__TAURI_INVOKE("save_note", { workspaceId, area, path, content })),
+	/**  Create a note from a title; returns its path. */
+	createNote: (workspaceId: string, area: Area, title: string) => typedError<string, CommandError>(__TAURI_INVOKE("create_note", { workspaceId, area, title })),
+	/**  An image from the workspace's knowledge, as a `data:` URL. */
+	readKnowledgeImage: (workspaceId: string, area: Area, path: string) => typedError<string, CommandError>(__TAURI_INVOKE("read_knowledge_image", { workspaceId, area, path })),
+	/**  Copy images Mike picked into the workspace's assets. Returns their asset paths. */
+	addKnowledgeAssets: (workspaceId: string, files: string[]) => typedError<string[], CommandError>(__TAURI_INVOKE("add_knowledge_assets", { workspaceId, files })),
+	listProjectDocs: (workspaceId: string) => typedError<ProjectDocs[], CommandError>(__TAURI_INVOKE("list_project_docs", { workspaceId })),
+	/**  Read one doc from one of the workspace's own projects. */
+	readProjectDoc: (workspaceId: string, projectPath: string, path: string) => typedError<string, CommandError>(__TAURI_INVOKE("read_project_doc", { workspaceId, projectPath, path })),
 	/**  Keystrokes, paste and dictation all arrive here. */
 	writeSession: (id: string, data: string) => typedError<null, CommandError>(__TAURI_INVOKE("write_session", { id, data })),
 	resizeSession: (id: string, cols: number, rows: number) => typedError<null, CommandError>(__TAURI_INVOKE("resize_session", { id, cols, rows })),
@@ -76,6 +95,15 @@ export type AppInfo = {
 export type AppInfoError = 
 /**  The OS isn't one Otto supports. V1 is macOS only (SPEC §5.1). */
 { kind: "unsupportedOs"; message: string };
+
+/**  Which part of knowledge a file is in. */
+export type Area = 
+/**  Shared by every workspace: About Mike. */
+"global" | 
+/**  The workspace's notes. Indexed for its agents. */
+"notes" | 
+/**  Never fed to agents unless Mike includes it in an Ask session. */
+"private" | "assets";
 
 export type Check = {
 	id: string,
@@ -116,6 +144,8 @@ export type DoctorReport = {
 	pushAllowed: boolean,
 };
 
+export type FileKind = "markdown" | "image" | "other";
+
 /**  A GitHub user or organisation login, compared case-insensitively. */
 export type GithubOwner = string;
 
@@ -124,6 +154,16 @@ export type Identity = {
 	gitName: string,
 	gitEmail: string,
 	githubUser: GithubOwner,
+};
+
+export type KnowledgeEntry = {
+	area: Area,
+	/**  Relative to the area's folder, with `/` separators. */
+	path: string,
+	title: string,
+	summary: string | null,
+	kind: FileKind,
+	updatedSecs: number,
 };
 
 /**  A conversation Otto can resume. */
@@ -145,6 +185,20 @@ export type Project = {
 	remoteUrl: string | null,
 	/**  The group the project sits in; `None` means ungrouped. */
 	groupId: string | null,
+};
+
+/**  A Markdown doc inside a project. */
+export type ProjectDoc = {
+	/**  Relative to the project root, with `/` separators. */
+	path: string,
+	title: string,
+};
+
+/**  One project's docs, for Knowledge → From your projects. */
+export type ProjectDocs = {
+	projectPath: string,
+	projectName: string,
+	docs: ProjectDoc[],
 };
 
 /**  A section of projects inside one workspace, such as Lauf's "Clients" (ADR-017). */

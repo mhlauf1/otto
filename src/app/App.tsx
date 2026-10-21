@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { AgentKind, ProjectGroup, Workspace } from '../bindings';
 import { OttoMark } from '../brand/OttoMark';
 import { DoctorPanel } from '../doctor/DoctorPanel';
-import { Knowledge } from '../overview/Knowledge';
+import { KnowledgeView } from '../knowledge/KnowledgeView';
 import { Overview } from '../overview/Overview';
 import { CommandPalette, type PaletteAction } from '../palette/CommandPalette';
 import { ImportProjects } from '../projects/ImportProjects';
@@ -64,7 +64,7 @@ export function App() {
   const doctor = useDoctor(active?.id);
   const queryClient = useQueryClient();
 
-  const { sessions, activeByWorkspace, open, close, select } = useSessions();
+  const { sessions, activeByWorkspace, open, openAsk, close, select } = useSessions();
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const activeSessionId = active ? activeByWorkspace[active.id] : undefined;
@@ -110,6 +110,16 @@ export function App() {
       });
     } catch (e) {
       setSessionError(e instanceof SessionError ? e.message : 'Couldn’t start the session.');
+    }
+  };
+
+  /** Ask (SPEC §7.5): Claude Code over the workspace's knowledge and projects. */
+  const ask = async (workspaceId: string, includePrivate: boolean) => {
+    setSessionError(null);
+    try {
+      await openAsk(workspaceId, includePrivate);
+    } catch (e) {
+      setSessionError(e instanceof SessionError ? e.message : 'Couldn’t start Ask.');
     }
   };
 
@@ -216,6 +226,15 @@ export function App() {
       keywords: 'notes context docs',
       run: () => {
         showPage('knowledge');
+      },
+    },
+    {
+      id: 'ask',
+      group: active.name,
+      label: `Ask ${active.name}`,
+      keywords: 'knowledge research question notes claude',
+      run: () => {
+        void ask(active.id, false);
       },
     },
     ...list.map((w, i) => ({
@@ -380,7 +399,13 @@ export function App() {
           />
         ) : null}
         {activeSessionId === undefined && page === 'knowledge' ? (
-          <Knowledge workspace={active} />
+          <KnowledgeView
+            key={active.id}
+            workspace={active}
+            onAsk={(includePrivate) => {
+              void ask(active.id, includePrivate);
+            }}
+          />
         ) : null}
       </main>
 

@@ -2,7 +2,19 @@
 
 Newest entries first.
 
-## Current milestone: M3.5 — Shape and labels (built, awaiting Mike's check)
+## Current milestone: M4 — Knowledge (built, awaiting Mike's check)
+
+### Definition of done
+
+- [x] SPEC §7 rewritten with Mike's approval (index of notes, About Mike shared). ADR-021.
+- [x] Knowledge storage, plus starter notes for Playbook (Company with Lula Fit → Playbook and Mike since March 2020; Architecture; People; Glossary; private Equity) and Lauf (Studio, Clients). Never overwritten.
+- [x] Generated `CLAUDE.md` and `AGENTS.md` per workspace: Mike's own instructions, About Mike, Overview and the note index. Rebuilt at launch, on save, before each session and after setup import. Hand-written files are kept as `*.user.md`.
+- [x] Claude sessions can open their own notes and About Mike (`--add-dir`). Ask covers notes, projects and, optionally, private.
+- [x] Knowledge view: list, Read/Edit with autosave, Markdown, Mermaid, images, project docs (read-only), assets.
+- [x] Isolation: `knowledge_feeds_each_workspace_only_its_own_notes` (27 tests). 11 knowledge unit tests, including path escapes and symlinks.
+- [ ] Mike tries it: fill in Playbook's Company note, open a new Playbook Claude session and ask what it knows about Playbook, then check a Lauf session doesn't know it. Try Ask.
+
+## Previous milestone: M3.5 — Shape and labels ✅ (PR #1)
 
 Planned with Mike in the 2026-10-20 "where next" session: Phase A (this milestone), then Phase B Knowledge (M4, expanded), then M5 and M6.
 
@@ -80,6 +92,13 @@ Planned with Mike in the 2026-10-20 "where next" session: Phase A (this mileston
 **Not done on purpose:** there's no placeholder `isolation-suite` CI job. A job that passes with zero tests would claim a guarantee we don't have yet (SPEC §0.3). M1 adds the real suite as a required check.
 
 ### Log
+
+#### 2026-10-20 (M4 Knowledge)
+
+- Mike approved the §7 rewrite: an index of notes, and About Mike shared by every workspace.
+- Built storage, generated instruction files, project docs, Ask, the Knowledge view, and the isolation test.
+- New dependencies, at exact versions: react-markdown 10.1.0, remark-gfm 4.0.1, mermaid 12.1.0 (loaded only when a note has a diagram).
+- Next: Mike checks M4 in Otto Dev. Then M5: persistence (sessions across relaunch, scrollback, the queue, worktrees and notifications).
 
 #### 2026-10-20 (where next, and M3.5)
 

@@ -10,6 +10,9 @@ Ideas for V2 and later. Nothing here gets built in V1. Newest first.
 - **Per-project notes:** for example, `notes/clients/stoc.md`, linked to its project and shown in the project header.
 - **Playbook Core MCP in Playbook only:** wire the Playbook Core MCP server into the Playbook workspace's Claude setup and never Lauf's. The Claude-setup import can already do this per workspace.
 - **Session rename** and drag-to-reorder for projects and groups.
+- **Links in notes open in the browser.** For now they show their address on hover but don't navigate, because that would replace Otto's window. Needs the Tauri opener plugin.
+- **Ask with Codex**, and listing past Ask conversations on the Knowledge page.
+- **Watch knowledge files live**, so edits made outside Otto refresh the list without reopening. For now they show on reopen, and agents get them on their next session.
 
 ## From SPEC §12 (2026-10-20)
 

@@ -1,6 +1,7 @@
 //! Long-lived app state, created once at startup and shared with every command.
 
 use otto_core::env::HostEnv;
+use otto_core::knowledge::{self, KnowledgePaths};
 use otto_core::provision::provision;
 use otto_core::store::{Store, StoreError};
 use otto_core::workspace::{OttoPaths, Workspace, WorkspaceId};
@@ -16,6 +17,7 @@ pub const DATA_FOLDER: &str = if cfg!(debug_assertions) {
 
 pub struct AppState {
     pub paths: OttoPaths,
+    pub knowledge: KnowledgePaths,
     pub host: HostEnv,
     pub store: Store,
     pub sessions: crate::sessions::Sessions,
@@ -29,6 +31,8 @@ pub enum StartupError {
     Store(#[from] StoreError),
     #[error(transparent)]
     Provision(#[from] otto_core::provision::ProvisionError),
+    #[error(transparent)]
+    Knowledge(#[from] knowledge::KnowledgeError),
     #[error("Couldn't create Otto's folder: {0}")]
     Io(#[from] std::io::Error),
 }
@@ -49,11 +53,16 @@ impl AppState {
         std::fs::create_dir_all(paths.root())?;
         let store = Store::open(&paths.database()).await?;
         store.seed_defaults().await?;
+        let knowledge = KnowledgePaths::new(paths.root());
         for ws in store.workspaces().await? {
-            provision(&ws, &paths.workspace(&ws.id))?;
+            let layout = paths.workspace(&ws.id);
+            provision(&ws, &layout)?;
+            knowledge::seed(&knowledge, &ws)?;
+            knowledge::write_instructions(&knowledge, &ws, &layout)?;
         }
         Ok(Self {
             paths,
+            knowledge,
             host,
             store,
             sessions: crate::sessions::Sessions::default(),

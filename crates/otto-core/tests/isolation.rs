@@ -914,3 +914,100 @@ fn past_conversations_never_cross_workspaces() {
         Some(world.layout(&world.lauf).claude_dir())
     );
 }
+
+/// SPEC §7.6: each workspace's generated CLAUDE.md and AGENTS.md hold only its own
+/// knowledge (plus the shared About Mike), never `private/`, and never the other workspace.
+#[test]
+fn knowledge_feeds_each_workspace_only_its_own_notes() {
+    use otto_core::knowledge::{self, Area, KnowledgePaths};
+
+    let world = World::new();
+    let k = KnowledgePaths::new(world.paths.root());
+    for ws in [&world.playbook, &world.lauf] {
+        knowledge::seed(&k, ws).unwrap();
+    }
+    knowledge::save_note(
+        &k,
+        &world.playbook.id,
+        Area::Notes,
+        "Roadmap.md",
+        "# Roadmap\n\nPLAYBOOK-ONLY-MARKER\n",
+    )
+    .unwrap();
+    knowledge::save_note(
+        &k,
+        &world.lauf.id,
+        Area::Private,
+        "Rates.md",
+        "# Rates\n\nLAUF-PRIVATE-MARKER\n",
+    )
+    .unwrap();
+    for ws in [&world.playbook, &world.lauf] {
+        knowledge::write_instructions(&k, ws, &world.layout(ws)).unwrap();
+    }
+
+    let read = |ws: &Workspace, file: PathBuf| fs::read_to_string(file).expect(&ws.name);
+    let pb_dir = k.workspace_dir(&world.playbook.id).display().to_string();
+    let lauf_dir = k.workspace_dir(&world.lauf.id).display().to_string();
+    for (ws, own, other) in [
+        (&world.playbook, &pb_dir, &lauf_dir),
+        (&world.lauf, &lauf_dir, &pb_dir),
+    ] {
+        let layout = world.layout(ws);
+        for file in [
+            layout.claude_dir().join("CLAUDE.md"),
+            layout.codex_dir().join("AGENTS.md"),
+        ] {
+            let text = read(ws, file);
+            assert!(text.contains("About Mike"), "{}", ws.name);
+            assert!(
+                text.contains(own.as_str()),
+                "{} indexes its own notes",
+                ws.name
+            );
+            assert!(
+                !text.contains(other.as_str()),
+                "{} must not see the other workspace",
+                ws.name
+            );
+            assert!(!text.contains("/private/"), "private notes are never fed");
+            assert!(!text.contains("LAUF-PRIVATE-MARKER"));
+        }
+    }
+    let lauf_claude = read(
+        &world.lauf,
+        world.layout(&world.lauf).claude_dir().join("CLAUDE.md"),
+    );
+    assert!(!lauf_claude.contains("Roadmap") && !lauf_claude.contains("PLAYBOOK-ONLY-MARKER"));
+
+    // Reads can't reach across, even when asked by path.
+    assert!(
+        knowledge::read_note(
+            &k,
+            &world.lauf.id,
+            Area::Notes,
+            "../../playbook/notes/Roadmap.md"
+        )
+        .is_err()
+    );
+
+    // The folders a session or Ask may open belong to that workspace (or are shared).
+    let project = world.dir.path().join("stoc");
+    for dirs in [
+        k.session_dirs(&world.lauf.id),
+        k.ask_dirs(&world.lauf.id, std::slice::from_ref(&project), true),
+    ] {
+        for dir in dirs {
+            let d = dir.display().to_string();
+            assert!(!d.starts_with(pb_dir.as_str()), "{d}");
+        }
+    }
+    assert!(
+        !k.ask_dirs(&world.lauf.id, &[], false)
+            .contains(&k.area_dir(&world.lauf.id, Area::Private))
+    );
+    assert!(
+        !k.session_dirs(&world.lauf.id)
+            .contains(&k.area_dir(&world.lauf.id, Area::Private))
+    );
+}

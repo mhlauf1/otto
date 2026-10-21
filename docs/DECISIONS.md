@@ -200,3 +200,16 @@ Each ADR records the context, the options, the decision and its consequences. Ne
   - Release builds keep `Otto` and `co.lauf.otto`.
   - `pnpm app:install` builds only the `.app` (skipping the `.dmg`), quits the installed Otto through AppleScript, swaps the bundle and reopens it.
 - **Consequences:** Otto Dev has its own workspaces, logins, projects and history, so Mike signs in once there. Isolation is unchanged: each build still isolates its workspaces from each other. Self-updating (the Tauri updater) waits for a signed build in M6.
+
+## ADR-021 — Knowledge reaches agents through each workspace's own instruction files
+
+- **Status:** Accepted (2026-10-20, approved by Mike: index rather than every note, About Mike shared)
+- **Context:** The original SPEC §7 had Otto edit each repo's `CLAUDE.md` and `AGENTS.md`. That would have put Mike's personal and company context into client repos and their git history. Mike also wants far more than one context file: company history, architecture, clients, private notes like equity, diagrams and assets.
+- **Decision:**
+  - Knowledge lives in `<Otto data>/knowledge/`: `global/About Mike.md`, plus `notes/`, `private/` and `assets/` for each workspace (SPEC §7.1).
+  - Otto **generates** each workspace's global instruction files: `claude/CLAUDE.md` (read from `CLAUDE_CONFIG_DIR`) and `codex/AGENTS.md` (read from `CODEX_HOME`). Each holds Mike's own instructions, About Mike, the workspace's Overview, and an index of its other notes (title, summary, path). The files carry a managed marker. A hand-written file found there is moved to `CLAUDE.user.md` / `AGENTS.user.md` first, and the Claude-setup import now writes to `CLAUDE.user.md`.
+  - The files are rebuilt at launch, whenever a note is saved, before every session opens, and after a setup import.
+  - Claude sessions get `--add-dir` for their own `notes/` and the global folder only. Ask runs in `notes/`, adds the workspace's projects, and adds `private/` only when Mike ticks "Include private".
+  - Every path from the UI is relative and is resolved inside one area. `..`, absolute paths and symlinks that leave the area are refused. Project docs can only be read if they appear in that project's doc list.
+  - Images go to the UI as `data:` URLs, so the strict CSP still allows no file access. Links in notes don't navigate the window.
+- **Consequences:** Repos are never touched. Each session pays for one small index, not every note. The isolation suite gains `knowledge_feeds_each_workspace_only_its_own_notes`.

@@ -219,7 +219,7 @@ Define every value as a token in `src/design/tokens.ts`, with CSS variables gene
 2. **Command palette (⌘K):** new session, switch workspace, jump to session, go to Overview or Knowledge, run Identity Doctor, and open context.
 3. **One input:** the terminal is the only place to type. There is no separate composer (removed 2026-10-20, ADR-018). The queue (M5) gets its own entry point, designed in M5.
 4. **Onboarding:** create a workspace, sign in to each CLI inside its isolated environment, generate or import the SSH key, set the GitHub owner allowlist, and run Identity Doctor until it's green.
-5. **Context editor:** view and edit the global and workspace layers.
+5. **Knowledge view:** read and edit the workspace's notes and About Mike, browse project docs, and open Ask (Section 7).
 6. **Settings.**
 
 ### 6.4 Shortcuts
@@ -236,20 +236,57 @@ Every UI pull request includes light and dark screenshots plus a short note comp
 
 ---
 
-## 7. Layered context
+## 7. Knowledge
 
-Context lives in `~/Library/Application Support/Otto/context/`:
+Rewritten 2026-10-20 with Mike (ADR-021). It replaces the earlier "layered context" plan, which would have edited each repo's `CLAUDE.md` and put personal context into client repos and git.
+
+### 7.1 What lives where
+
+Everything stays on this Mac, in Otto's data folder, and never goes into a repo:
 
 ```
-context/
-  global/ABOUT_MIKE.md        # who Mike is, preferences, stack, tone
-  workspaces/playbook/CONTEXT.md
-  workspaces/lauf/CONTEXT.md
+knowledge/
+  global/About Mike.md          # shared by every workspace; nothing sensitive
+  workspaces/<id>/
+    notes/      # Markdown, images, Mermaid diagrams: agents can read these
+    private/    # Markdown that agents never get unless Mike allows it
+    assets/     # logos, screenshots, brand files
 ```
 
-- When a session starts in a repo, Otto makes sure the repo's `CLAUDE.md` and `AGENTS.md` **import or reference** the global layer plus that workspace's layer. It uses each tool's supported import mechanism, and doesn't duplicate the text.
-- **Strict separation:** a session can only ever load the global layer and its own workspace's layer. The Playbook layer must never appear in a Lauf session, and the reverse. This is covered by tests.
-- File-watching means edits apply to new sessions immediately.
+Starter notes are created once, as outlines, and are never overwritten:
+- Playbook: `Overview`, `Company` (Lula Fit → Playbook; Mike since March 2020), `Architecture`, `People` and `Glossary`, plus `private/Equity`.
+- Lauf: `Overview`, `Studio` and `Clients`.
+
+### 7.2 How agents get it
+
+- Otto writes each workspace's **own** global instruction files: `claude/CLAUDE.md` (Claude reads it from `CLAUDE_CONFIG_DIR`) and `codex/AGENTS.md` (Codex reads it from `CODEX_HOME`).
+- Each file contains, in order:
+  - Mike's imported Claude setup instructions (kept as `CLAUDE.user.md`)
+  - About Mike
+  - the workspace's `Overview` note
+  - an **index** of the workspace's other notes: title, one-line summary and full path
+- Full notes aren't pasted in. Agents open a note when they need it. Claude sessions get access to their own workspace's `notes/` and the global folder (`--add-dir`, with Claude's usual permission prompts), and nothing else.
+- Repo files are never touched.
+- The files are rebuilt at launch, whenever a note is saved, and after the Claude setup is imported.
+
+### 7.3 From your projects
+
+For each of the workspace's projects, Knowledge lists `CLAUDE.md`, `AGENTS.md`, `README*` and Markdown under `docs/`. They're shown in place, read-only and never copied. A file can only be read if it sits inside one of that workspace's registered projects.
+
+### 7.4 The Knowledge view
+
+A list (Notes, Private, From your projects, Assets) sits beside a reader and editor. The reader shows Markdown with Mermaid diagrams and images, and the editor saves as Mike types. New notes are created from the list. The design comes from Mobbin references first.
+
+### 7.5 Ask
+
+"Ask" opens a normal Claude Code session for the workspace. It runs in the workspace's `notes/` folder, with access to the workspace's projects and the global folder, so it can research and draft notes. "Include private" adds `private/` for that session only.
+
+### 7.6 Strict separation (tests)
+
+- A workspace's generated `CLAUDE.md` and `AGENTS.md` never contain another workspace's notes or paths.
+- `private/` never appears in a generated file.
+- Note and project-doc reads refuse paths outside the workspace's own knowledge folder and projects, including `..` and symlinks that point out.
+- Ask and `--add-dir` only ever list the workspace's own folders.
 
 ## 8. Sessions and queue
 
@@ -293,7 +330,7 @@ The learning-mode rule: whenever you introduce a new concept (for example, a Rus
 2. **Terminal sessions:** PTY plus xterm.js, Claude and Codex launched inside isolated environments, and sign-in flows.
 3. **Shell and design pass:** sidebar, workspace switcher, command palette and composer, all built from Mobbin references.
 3.5. **Shape and labels:** the words in §2.1, project groups, sessions nested under projects, the Overview page, a Knowledge placeholder, and removing the composer (ADR-017, ADR-018).
-4. **Context layers:** ContextService, CLAUDE.md and AGENTS.md wiring, the context editor and separation tests.
+4. **Knowledge:** knowledge storage and starter notes, generated per-workspace `CLAUDE.md` and `AGENTS.md`, project docs, Ask, the Knowledge view and separation tests (Section 7).
 5. **Persistence and queue:** resume, scrollback, the task queue, worktrees and notifications.
 6. **Polish and ship:** performance budgets, accessibility, onboarding, and a signed and notarized build.
 
@@ -335,3 +372,4 @@ Section 4's isolation rules enforce this mapping. Only `mikelauf`, with the play
 - 2026-10-20: Approved by Mike after trying M3: the composer is on demand (⌘L), ↵ sends and ⇧↵ adds a line (was ⌘↵). New sessions start from a single "+ New session" menu (Claude, Codex, Shell).
 - 2026-10-20: Approved by Mike in the "where next" planning session. Added the §2.1 glossary and milestone 3.5 (Shape and labels). Project groups are in §5.3. §6.3 now describes the nested sidebar and the Overview page. The composer is removed and the terminal is the only input (§3 item 8, §6.3). The Section 7 Knowledge rewrite is planned for M4 and will be recorded when it lands.
 - 2026-10-20: Asked for by Mike after his stoc session vanished on relaunch: Claude conversation resume is pulled forward from M5 (§8, ADR-019).
+- 2026-10-20: Approved by Mike: Section 7 rewritten as Knowledge (ADR-021). Agents get an index of notes rather than every note, About Mike is shared by every workspace, and repo files are never edited. §6.3 item 5 and milestone 4 were updated to match.

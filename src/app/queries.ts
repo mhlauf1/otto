@@ -3,6 +3,9 @@ import { isTauri } from '@tauri-apps/api/core';
 import {
   commands,
   type AppInfo,
+  type Area,
+  type KnowledgeEntry,
+  type ProjectDocs,
   type DiscoveredRepo,
   type DoctorReport,
   type PastConversation,
@@ -10,7 +13,15 @@ import {
   type ProjectGroup,
   type Workspace,
 } from '../bindings';
-import { PREVIEW_GROUPS, PREVIEW_PAST, PREVIEW_PROJECTS, PREVIEW_WORKSPACES } from './preview';
+import {
+  PREVIEW_GROUPS,
+  PREVIEW_KNOWLEDGE,
+  PREVIEW_NOTES,
+  PREVIEW_PAST,
+  PREVIEW_PROJECT_DOCS,
+  PREVIEW_PROJECTS,
+  PREVIEW_WORKSPACES,
+} from './preview';
 
 /** A failure we can show to Mike as-is. */
 export class FriendlyError extends Error {}
@@ -39,6 +50,14 @@ export const queryKeys = {
   past: (workspaceId: string) => ['past', workspaceId] as const,
   pastIn: (workspaceId: string, projectPath: string | undefined) =>
     ['past', workspaceId, projectPath ?? ''] as const,
+  knowledge: (workspaceId: string) => ['knowledge', workspaceId] as const,
+  note: (workspaceId: string, area: Area, path: string) =>
+    ['knowledge', workspaceId, 'note', area, path] as const,
+  projectDocs: (workspaceId: string) => ['knowledge', workspaceId, 'projectDocs'] as const,
+  projectDoc: (workspaceId: string, projectPath: string, path: string) =>
+    ['knowledge', workspaceId, 'projectDoc', projectPath, path] as const,
+  image: (workspaceId: string, area: Area, path: string) =>
+    ['knowledge', workspaceId, 'image', area, path] as const,
   discovered: ['discovered'] as const,
 };
 
@@ -117,6 +136,74 @@ export function usePastConversations(workspaceId: string, projectPath: string | 
         : (PREVIEW_PAST[projectPath ?? ''] ?? []),
   });
 }
+
+/** Notes, private notes, assets and About Mike for one workspace. */
+export function useKnowledge(workspaceId: string) {
+  return useQuery({
+    queryKey: queryKeys.knowledge(workspaceId),
+    queryFn: async (): Promise<KnowledgeEntry[]> =>
+      isTauri() ? unwrap(await commands.listKnowledge(workspaceId)) : PREVIEW_KNOWLEDGE,
+  });
+}
+
+/** One note's Markdown. Not refetched in the background, so it never clobbers typing. */
+export function useNote(workspaceId: string, area: Area, path: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.note(workspaceId, area, path ?? ''),
+    enabled: path !== undefined,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    queryFn: async (): Promise<string> => {
+      if (!path) return '';
+      return isTauri()
+        ? unwrap(await commands.readNote(workspaceId, area, path))
+        : (PREVIEW_NOTES[`${area}:${path}`] ?? `# ${path.replace(/\.md$/, '')}\n`);
+    },
+  });
+}
+
+export function useProjectDocs(workspaceId: string) {
+  return useQuery({
+    queryKey: queryKeys.projectDocs(workspaceId),
+    queryFn: async (): Promise<ProjectDocs[]> =>
+      isTauri()
+        ? unwrap(await commands.listProjectDocs(workspaceId))
+        : (PREVIEW_PROJECT_DOCS[workspaceId] ?? []),
+  });
+}
+
+export function useProjectDoc(workspaceId: string, projectPath: string, path: string) {
+  return useQuery({
+    queryKey: queryKeys.projectDoc(workspaceId, projectPath, path),
+    queryFn: async (): Promise<string> =>
+      isTauri()
+        ? unwrap(await commands.readProjectDoc(workspaceId, projectPath, path))
+        : `# ${path}\n\nA project doc, shown read-only.\n`,
+  });
+}
+
+/** An image from knowledge as a `data:` URL (the CSP allows no file access). */
+export function useKnowledgeImage(workspaceId: string, area: Area, path: string) {
+  return useQuery({
+    queryKey: queryKeys.image(workspaceId, area, path),
+    staleTime: Infinity,
+    retry: false,
+    queryFn: async (): Promise<string> => {
+      if (!isTauri()) throw new FriendlyError(PREVIEW_MESSAGE);
+      return unwrap(await commands.readKnowledgeImage(workspaceId, area, path));
+    },
+  });
+}
+
+export const knowledgeActions = {
+  save: async (workspaceId: string, area: Area, path: string, content: string): Promise<void> => {
+    unwrap(await commands.saveNote(workspaceId, area, path, content));
+  },
+  create: async (workspaceId: string, area: Area, title: string): Promise<string> =>
+    unwrap(await commands.createNote(workspaceId, area, title)),
+  addAssets: async (workspaceId: string, files: string[]): Promise<string[]> =>
+    unwrap(await commands.addKnowledgeAssets(workspaceId, files)),
+};
 
 /** Group edits. Each refuses anything outside `workspaceId` (enforced in the core). */
 export const groupActions = {

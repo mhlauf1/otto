@@ -1,4 +1,11 @@
-import type { PastConversation, Project, ProjectGroup, Workspace } from '../bindings';
+import type {
+  KnowledgeEntry,
+  PastConversation,
+  Project,
+  ProjectDocs,
+  ProjectGroup,
+  Workspace,
+} from '../bindings';
 
 /**
  * Browser-preview stand-ins (`pnpm dev:web`, Vitest, Playwright), used only when there's
@@ -100,6 +107,46 @@ export const PREVIEW_PAST: Record<string, PastConversation[] | undefined> = {
       id: '2fabc426-502e-41bd-99a6-3d6942ba4f8f',
       title: 'Industry reports for pest control and funeral homes',
       updatedSecs: Date.UTC(2026, 9, 19, 16, 5) / 1000,
+    },
+  ],
+};
+
+const note = (
+  area: KnowledgeEntry['area'],
+  path: string,
+  title: string,
+  summary: string | null,
+): KnowledgeEntry => ({ area, path, title, summary, kind: 'markdown', updatedSecs: 1792540000 });
+
+/** Preview knowledge (the same for every workspace in the browser). */
+export const PREVIEW_KNOWLEDGE: KnowledgeEntry[] = [
+  note(
+    'global',
+    'About Mike.md',
+    'About Mike',
+    'Mike Laufersweiler: design engineer. Works at Playbook (since March 2020) and runs Lauf, a studio that builds websites for clients.',
+  ),
+  note('notes', 'Overview.md', 'Overview', 'The one note every session reads in full.'),
+  note('notes', 'Clients.md', 'Clients', 'One line per client: who they are, their site.'),
+  note('notes', 'Studio.md', 'Studio', 'Lauf: what the studio does and how it works.'),
+  note('private', 'Rates.md', 'Rates', 'What Lauf charges.'),
+  { ...note('assets', 'logo.png', 'logo', null), kind: 'image' },
+];
+
+export const PREVIEW_NOTES: Record<string, string | undefined> = {
+  'notes:Clients.md':
+    '# Clients\n\nOne line per client: who they are, their site.\n\n- **STOC**: industry reports, Sanity CMS\n- **Brady Digital Consulting**\n\n```mermaid\nflowchart LR\n  Lead --> Proposal --> Build --> Launch\n```\n',
+};
+
+export const PREVIEW_PROJECT_DOCS: Record<string, ProjectDocs[] | undefined> = {
+  lauf: [
+    {
+      projectPath: '/preview/stoc',
+      projectName: 'stoc',
+      docs: [
+        { path: 'CLAUDE.md', title: 'stoc' },
+        { path: 'README.md', title: 'STOC website' },
+      ],
     },
   ],
 };
