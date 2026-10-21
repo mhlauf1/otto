@@ -26,7 +26,6 @@ const MAX_INLINE_CHARS: usize = 8_000;
 const MAX_SUMMARY: usize = 140;
 const MAX_DEPTH: usize = 4;
 const MAX_IMAGE_BYTES: u64 = 10 * 1024 * 1024;
-const MAX_PROJECT_DOCS: usize = 200;
 
 #[derive(Debug, thiserror::Error)]
 pub enum KnowledgeError {
@@ -701,69 +700,6 @@ pub fn write_instructions(
     Ok(())
 }
 
-/// A Markdown doc inside a project.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
-#[serde(rename_all = "camelCase")]
-pub struct ProjectDoc {
-    /// Relative to the project root, with `/` separators.
-    pub path: String,
-    pub title: String,
-}
-
-/// `CLAUDE.md`, `AGENTS.md`, `README*` and `docs/**/*.md` in a project, without following
-/// symlinks.
-#[must_use]
-pub fn project_docs(root: &Path) -> Vec<ProjectDoc> {
-    let mut found = Vec::new();
-    if let Ok(read) = fs::read_dir(root) {
-        let mut names: Vec<String> = read
-            .filter_map(Result::ok)
-            .filter(|e| e.file_type().is_ok_and(|t| t.is_file()))
-            .map(|e| e.file_name().to_string_lossy().into_owned())
-            .filter(|n| {
-                let lower = n.to_lowercase();
-                lower == "claude.md"
-                    || lower == "agents.md"
-                    || (lower.starts_with("readme") && kind_of(Path::new(n)) == FileKind::Markdown)
-            })
-            .collect();
-        names.sort();
-        found.extend(names.into_iter().map(|n| root.join(n)));
-    }
-    let mut docs = Vec::new();
-    walk(&root.join("docs"), 0, &mut docs);
-    docs.retain(|p| kind_of(p) == FileKind::Markdown);
-    docs.sort();
-    found.extend(docs);
-    found
-        .into_iter()
-        .take(MAX_PROJECT_DOCS)
-        .filter_map(|file| {
-            let rel = file
-                .strip_prefix(root)
-                .ok()?
-                .to_string_lossy()
-                .replace('\\', "/");
-            let stem = file.file_stem()?.to_string_lossy().into_owned();
-            let title = fs::read_to_string(&file)
-                .map_or_else(|_| stem.clone(), |t| title_and_summary(&t, &stem).0);
-            Some(ProjectDoc { path: rel, title })
-        })
-        .collect()
-}
-
-/// Read one doc from a project, only if it's one [`project_docs`] lists.
-///
-/// # Errors
-/// Refuses anything else; fails on I/O errors.
-pub fn read_project_doc(root: &Path, rel: &str) -> Result<String, KnowledgeError> {
-    if !project_docs(root).iter().any(|d| d.path == rel) {
-        return Err(KnowledgeError::OutsideArea);
-    }
-    let path = contained(root, rel)?;
-    Ok(fs::read_to_string(path)?)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -949,33 +885,6 @@ mod tests {
         let text = instructions(&w.k, &w.lauf, &layout, Agent::Claude);
         assert!(text.contains("(Continues in `"));
         assert!(text.len() < 12_000);
-    }
-
-    #[test]
-    fn project_docs_list_the_usual_files_and_nothing_else() {
-        let dir = tempfile::tempdir().unwrap();
-        let root = dir.path();
-        fs::write(root.join("CLAUDE.md"), "# Claude notes\n").unwrap();
-        fs::write(root.join("README.md"), "# Stoc\n").unwrap();
-        fs::write(root.join("secrets.env"), "KEY=1").unwrap();
-        fs::create_dir_all(root.join("docs/guides")).unwrap();
-        fs::write(root.join("docs/guides/deploy.md"), "# Deploying\n").unwrap();
-        fs::write(root.join("docs/logo.png"), "png").unwrap();
-        let docs: Vec<_> = project_docs(root)
-            .into_iter()
-            .map(|d| (d.path, d.title))
-            .collect();
-        assert_eq!(
-            docs,
-            [
-                ("CLAUDE.md".into(), "Claude notes".into()),
-                ("README.md".into(), "Stoc".into()),
-                ("docs/guides/deploy.md".into(), "Deploying".into()),
-            ]
-        );
-        assert!(read_project_doc(root, "README.md").is_ok());
-        assert!(read_project_doc(root, "secrets.env").is_err());
-        assert!(read_project_doc(root, "../etc/passwd").is_err());
     }
 
     #[test]

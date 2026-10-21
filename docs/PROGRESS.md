@@ -109,6 +109,8 @@ Planned with Mike in the 2026-10-20 "where next" session: Phase A (this mileston
 
 - Mike asked how Otto is built, where data lives, whether it bloats and what it costs. Measured: the database is 128 KB, but the data folder was 1.5 GB because each workspace had its own Claude download, and Claude's updater had re-pointed `~/.local/bin/claude` into Otto's Lauf folder. Fixed going forward (ADR-023). Mike needs to run `claude install` once.
 - Built M5a (ADR-022). New dependency: `tauri-plugin-notification` 2.5.1, at exact versions.
+- Mike moved back to the installed Otto.app (`pnpm app:install`). The database upgraded to 0006 with all 11 projects kept. Playbook's stray Claude copy was pruned (1.5 GB → 1.2 GB); Lauf's waits until Mike runs `claude install`.
+- Mike asked to remove "From your projects" from Knowledge. Removed end to end (SPEC §7.3, ADR-021 amendment).
 - Next: Mike checks M5a, then M5b (queue and worktrees).
 
 #### 2026-10-20 (M4 Knowledge)

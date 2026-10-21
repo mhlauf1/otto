@@ -44,8 +44,6 @@ pub fn ipc() -> Builder<tauri::Wry> {
             commands::create_note,
             commands::read_knowledge_image,
             commands::add_knowledge_assets,
-            commands::list_project_docs,
-            commands::read_project_doc,
             commands::write_session,
             commands::resize_session,
             commands::close_session,

@@ -133,7 +133,7 @@ describe('App', () => {
     expect(
       within(within(list).getByRole('region', { name: 'Private' })).getByText('Rates'),
     ).toBeTruthy();
-    expect(within(list).getByRole('region', { name: 'From your projects' })).toBeTruthy();
+    expect(within(list).queryByRole('region', { name: 'From your projects' })).toBeNull();
 
     fireEvent.click(within(list).getByRole('button', { name: /^Clients/ }));
     expect(await screen.findByText('Agents read this')).toBeTruthy();

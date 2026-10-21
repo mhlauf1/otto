@@ -225,3 +225,4 @@ Mike found the first layout clashing: the list sat in a bordered card with a sec
 - **Notifications:**
   - Title "Lauf · stoc · Claude Code", with the agent's own message (for example "Claude needs your permission to use Bash"), else "Finished. Your turn." or "Needs you."
   - They're sent only when Mike isn't already looking at that session.
+- **"From your projects" removed** (Mike: too many files). The list is now just Shared, Notes, Private and Assets.

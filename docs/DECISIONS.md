@@ -234,3 +234,7 @@ Each ADR records the context, the options, the decision and its consequences. Ne
   - At launch, `housekeeping::prune_stray_claude_versions` removes a workspace's downloads, **unless** the `claude` on the PATH resolves into them.
   - The Identity Doctor warns ("Claude install") when `claude` runs from Otto's data, and suggests running `claude install` in a normal terminal.
 - **Consequences:** Once Mike runs `claude install`, about 1 GB is freed on the next launch. Codex's own package cache (325 MB) is left alone, because Codex manages it.
+
+### ADR-021 amendment (2026-10-20)
+
+"From your projects" is removed at Mike's request: listing every repo's Markdown flooded Knowledge. The core functions, commands, UI and their tests went with it. Agents still read a repo's own docs when working in it, and Ask can open the workspace's projects.

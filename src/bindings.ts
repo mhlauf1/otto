@@ -65,9 +65,6 @@ export const commands = {
 	readKnowledgeImage: (workspaceId: string, area: Area, path: string) => typedError<string, CommandError>(__TAURI_INVOKE("read_knowledge_image", { workspaceId, area, path })),
 	/**  Copy images Mike picked into the workspace's assets. Returns their asset paths. */
 	addKnowledgeAssets: (workspaceId: string, files: string[]) => typedError<string[], CommandError>(__TAURI_INVOKE("add_knowledge_assets", { workspaceId, files })),
-	listProjectDocs: (workspaceId: string) => typedError<ProjectDocs[], CommandError>(__TAURI_INVOKE("list_project_docs", { workspaceId })),
-	/**  Read one doc from one of the workspace's own projects. */
-	readProjectDoc: (workspaceId: string, projectPath: string, path: string) => typedError<string, CommandError>(__TAURI_INVOKE("read_project_doc", { workspaceId, projectPath, path })),
 	/**  Keystrokes, paste and dictation all arrive here. */
 	writeSession: (id: string, data: string) => typedError<null, CommandError>(__TAURI_INVOKE("write_session", { id, data })),
 	resizeSession: (id: string, cols: number, rows: number) => typedError<null, CommandError>(__TAURI_INVOKE("resize_session", { id, cols, rows })),
@@ -201,20 +198,6 @@ export type Project = {
 	remoteUrl: string | null,
 	/**  The group the project sits in; `None` means ungrouped. */
 	groupId: string | null,
-};
-
-/**  A Markdown doc inside a project. */
-export type ProjectDoc = {
-	/**  Relative to the project root, with `/` separators. */
-	path: string,
-	title: string,
-};
-
-/**  One project's docs, for Knowledge → From your projects. */
-export type ProjectDocs = {
-	projectPath: string,
-	projectName: string,
-	docs: ProjectDoc[],
 };
 
 /**  A section of projects inside one workspace, such as Lauf's "Clients" (ADR-017). */

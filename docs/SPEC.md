@@ -269,13 +269,13 @@ Starter notes are created once, as outlines, and are never overwritten:
 - Repo files are never touched.
 - The files are rebuilt at launch, whenever a note is saved, and after the Claude setup is imported.
 
-### 7.3 From your projects
+### 7.3 Project docs stay in their repos
 
-For each of the workspace's projects, Knowledge lists `CLAUDE.md`, `AGENTS.md`, `README*` and Markdown under `docs/`. They're shown in place, read-only and never copied. A file can only be read if it sits inside one of that workspace's registered projects.
+Knowledge doesn't list the projects' own Markdown files (removed at Mike's request, 2026-10-20, because it flooded the list). Agents already read a repo's `CLAUDE.md` and docs when working in it. To bring a doc into the conversation, Mike points the agent at the file, or uses Ask, which can open the workspace's projects (7.5).
 
 ### 7.4 The Knowledge view
 
-A list (Notes, Private, From your projects, Assets) sits beside a reader and editor. The reader shows Markdown with Mermaid diagrams and images, and the editor saves as Mike types. New notes are created from the list. The design comes from Mobbin references first.
+A list (Shared, Notes, Private, Assets) sits beside a reader and editor. The reader shows Markdown with Mermaid diagrams and images, and the editor saves as Mike types. New notes are created from the list. The design comes from Mobbin references first.
 
 ### 7.5 Ask
 
@@ -285,7 +285,7 @@ A list (Notes, Private, From your projects, Assets) sits beside a reader and edi
 
 - A workspace's generated `CLAUDE.md` and `AGENTS.md` never contain another workspace's notes or paths.
 - `private/` never appears in a generated file.
-- Note and project-doc reads refuse paths outside the workspace's own knowledge folder and projects, including `..` and symlinks that point out.
+- Note reads refuse paths outside the workspace's own knowledge folder, including `..` and symlinks that point out.
 - Ask and `--add-dir` only ever list the workspace's own folders.
 
 ## 8. Sessions and queue
@@ -391,3 +391,4 @@ Section 4's isolation rules enforce this mapping. Only `mikelauf`, with the play
 - 2026-10-20: Asked for by Mike after his stoc session vanished on relaunch: Claude conversation resume is pulled forward from M5 (§8, ADR-019).
 - 2026-10-20: Approved by Mike: Section 7 rewritten as Knowledge (ADR-021). Agents get an index of notes rather than every note, About Mike is shared by every workspace, and repo files are never edited. §6.3 item 5 and milestone 4 were updated to match.
 - 2026-10-20: Approved by Mike: M5 is split into 5a and 5b, and sessions come back paused and resume on a click. §8 rewritten as 8.1 and 8.2, with ADR-022 and ADR-023.
+- 2026-10-20: Asked for by Mike: removed "From your projects" from Knowledge (§7.3, §7.4, §7.6). Project docs stay in their repos; Ask can still open them.

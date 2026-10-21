@@ -11,7 +11,7 @@ use otto_core::claude_setup::{self, ClaudeSource, SetupItem};
 use otto_core::doctor::{self, DoctorReport};
 use otto_core::env::IsolatedEnv;
 use otto_core::history::{self, PastConversation};
-use otto_core::knowledge::{self, Area, KnowledgeEntry, KnowledgeError, ProjectDoc};
+use otto_core::knowledge::{self, Area, KnowledgeEntry, KnowledgeError};
 use otto_core::projects::{DiscoveredRepo, classify, find_repos};
 use otto_core::provision::write_doctor_status;
 use otto_core::pty::{PtyEvent, PtySession};
@@ -794,57 +794,6 @@ pub async fn add_knowledge_assets(
     .await
     .map_err(internal)?
     .map_err(knowledge_error)
-}
-
-/// One project's docs, for Knowledge → From your projects.
-#[derive(Debug, Clone, Serialize, Type)]
-#[serde(rename_all = "camelCase")]
-pub struct ProjectDocs {
-    pub project_path: String,
-    pub project_name: String,
-    pub docs: Vec<ProjectDoc>,
-}
-
-#[tauri::command]
-#[specta::specta]
-pub async fn list_project_docs(
-    state: State<'_, AppState>,
-    workspace_id: String,
-) -> Result<Vec<ProjectDocs>, CommandError> {
-    let ws = state.workspace(&workspace_id).await?;
-    let projects = state.store.projects(&ws.id).await.map_err(internal)?;
-    tauri::async_runtime::spawn_blocking(move || {
-        projects
-            .into_iter()
-            .map(|p| ProjectDocs {
-                docs: knowledge::project_docs(std::path::Path::new(&p.path)),
-                project_path: p.path,
-                project_name: p.name,
-            })
-            .filter(|p| !p.docs.is_empty())
-            .collect()
-    })
-    .await
-    .map_err(internal)
-}
-
-/// Read one doc from one of the workspace's own projects.
-#[tauri::command]
-#[specta::specta]
-pub async fn read_project_doc(
-    state: State<'_, AppState>,
-    workspace_id: String,
-    project_path: String,
-    path: String,
-) -> Result<String, CommandError> {
-    let ws = state.workspace(&workspace_id).await?;
-    let root = session_cwd(&state, &ws, Some(&project_path))
-        .await?
-        .ok_or_else(|| CommandError::Invalid("No project given.".into()))?;
-    tauri::async_runtime::spawn_blocking(move || knowledge::read_project_doc(&root, &path))
-        .await
-        .map_err(internal)?
-        .map_err(knowledge_error)
 }
 
 /// Keystrokes, paste and dictation all arrive here.

@@ -2,7 +2,6 @@ import type {
   KnowledgeEntry,
   PastConversation,
   Project,
-  ProjectDocs,
   ProjectGroup,
   SavedSession,
   Workspace,
@@ -137,19 +136,6 @@ export const PREVIEW_KNOWLEDGE: KnowledgeEntry[] = [
 export const PREVIEW_NOTES: Record<string, string | undefined> = {
   'notes:Clients.md':
     '# Clients\n\nOne line per client: who they are, their site.\n\n- **STOC**: industry reports, Sanity CMS\n- **Brady Digital Consulting**\n\n```mermaid\nflowchart LR\n  Lead --> Proposal --> Build --> Launch\n```\n',
-};
-
-export const PREVIEW_PROJECT_DOCS: Record<string, ProjectDocs[] | undefined> = {
-  lauf: [
-    {
-      projectPath: '/preview/stoc',
-      projectName: 'stoc',
-      docs: [
-        { path: 'CLAUDE.md', title: 'stoc' },
-        { path: 'README.md', title: 'STOC website' },
-      ],
-    },
-  ],
 };
 
 /** Preview: one session left open when Otto last quit. */
