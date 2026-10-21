@@ -1,0 +1,5 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Otto Dev",
+  "identifier": "co.lauf.otto.dev"
+}
