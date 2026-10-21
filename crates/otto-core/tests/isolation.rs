@@ -1011,3 +1011,104 @@ fn knowledge_feeds_each_workspace_only_its_own_notes() {
             .contains(&k.area_dir(&world.lauf.id, Area::Private))
     );
 }
+
+/// A `claude` command that resolves into Otto's own data folder is flagged, because
+/// Mike's normal terminal would then depend on Otto's files (found 2026-10-20).
+#[test]
+fn doctor_warns_when_claude_runs_from_otto_s_data_folder() {
+    let world = World::new();
+    let fakebin = world.dir.path().join("fakebin");
+    let inside = world
+        .layout(&world.lauf)
+        .root()
+        .join("xdg/data/claude/versions/9.9.9");
+    fs::create_dir_all(inside.parent().unwrap()).unwrap();
+    fs::write(&inside, "#!/bin/sh\necho 9.9.9\n").unwrap();
+    fs::set_permissions(&inside, fs::Permissions::from_mode(0o755)).unwrap();
+    std::os::unix::fs::symlink(&inside, fakebin.join("claude")).unwrap();
+
+    let report = doctor::diagnose(&world.playbook, &world.layout(&world.playbook), &world.host);
+    let check = report
+        .checks
+        .iter()
+        .find(|c| c.id == "claudeInstall")
+        .unwrap();
+    assert_eq!(check.status, CheckStatus::Warn, "{}", check.detail);
+
+    fs::remove_file(fakebin.join("claude")).unwrap();
+    let outside = world.dir.path().join("claude-real");
+    fs::write(&outside, "#!/bin/sh\n").unwrap();
+    std::os::unix::fs::symlink(&outside, fakebin.join("claude")).unwrap();
+    let report = doctor::diagnose(&world.playbook, &world.layout(&world.playbook), &world.host);
+    let check = report
+        .checks
+        .iter()
+        .find(|c| c.id == "claudeInstall")
+        .unwrap();
+    assert_eq!(check.status, CheckStatus::Pass);
+}
+
+/// M5a: agents report status through their own workspace's inbox. An event in Lauf's
+/// inbox can't change a Playbook session, and each script writes only to its own inbox.
+#[tokio::test]
+async fn agent_events_only_update_their_own_workspace() {
+    use otto_core::agent::AgentKind;
+    use otto_core::agent_events;
+    use otto_core::store::{SavedSession, SessionKind, SessionStatus, Store};
+
+    let world = World::new();
+    let (pb, lauf) = (world.layout(&world.playbook), world.layout(&world.lauf));
+    let pb_inbox = agent_events::inbox_dir(&pb).display().to_string();
+    let lauf_inbox = agent_events::inbox_dir(&lauf).display().to_string();
+    let lauf_script = fs::read_to_string(agent_events::script_path(&lauf)).unwrap();
+    assert!(lauf_script.contains(&lauf_inbox) && !lauf_script.contains(&pb_inbox));
+
+    let store = Store::open(&world.dir.path().join("otto.db"))
+        .await
+        .unwrap();
+    store.seed_defaults().await.unwrap();
+    let pb_session = "7de656b9-96e1-4226-9fbe-c8d129813f94";
+    store
+        .save_session(&SavedSession {
+            id: pb_session.into(),
+            workspace_id: "playbook".into(),
+            agent: AgentKind::Claude,
+            project_path: None,
+            title: "Claude Code".into(),
+            kind: SessionKind::Work,
+            cli_session_id: None,
+            status: SessionStatus::Idle,
+            last_active_at: String::new(),
+        })
+        .await
+        .unwrap();
+
+    // Something drops a Playbook session's ID into Lauf's inbox.
+    fs::write(
+        agent_events::inbox_dir(&lauf).join(format!("{pb_session}.claude.x.json")),
+        r#"{"hook_event_name":"UserPromptSubmit"}"#,
+    )
+    .unwrap();
+    let events = agent_events::drain(&lauf);
+    assert_eq!(events.len(), 1);
+    for e in &events {
+        let applied = store
+            .set_session_status(&world.lauf.id, &e.session_id, e.status)
+            .await
+            .unwrap();
+        assert!(!applied, "Lauf's inbox must not reach a Playbook session");
+    }
+    let pb_now = store
+        .session(&world.playbook.id, pb_session)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(pb_now.status, SessionStatus::Idle);
+    assert!(
+        store
+            .session(&world.lauf.id, pb_session)
+            .await
+            .unwrap()
+            .is_none()
+    );
+}

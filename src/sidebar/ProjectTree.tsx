@@ -1,7 +1,14 @@
 import * as Menu from '@radix-ui/react-dropdown-menu';
-import { useState } from 'react';
-import type { AgentKind, PastConversation, Project, ProjectGroup, Workspace } from '../bindings';
-import { groupActions, usePastConversations } from '../app/queries';
+import { createContext, useContext, useState } from 'react';
+import type {
+  AgentKind,
+  PastConversation,
+  Project,
+  ProjectGroup,
+  SavedSession,
+  Workspace,
+} from '../bindings';
+import { groupActions, usePastConversations, usePausedSessions } from '../app/queries';
 import { NewSessionMenu } from '../sessions/NewSessionMenu';
 import { ago, sessionLabels } from '../sessions/labels';
 import type { LiveSession } from '../sessions/registry';
@@ -24,6 +31,9 @@ interface ProjectTreeProps {
   onNewSession: (agent: AgentKind, projectPath: string | undefined) => void;
   /** Continue an earlier Claude conversation from this project (or General). */
   onResume: (conversationId: string, projectPath: string | undefined) => void;
+  /** Pick up a session that was open when Otto last quit. */
+  onResumePaused: (id: string) => void;
+  onDismissPaused: (id: string) => void;
   /** Open the import sheet, importing straight into `group` when given. */
   onImport: (group?: ProjectGroup) => void;
   /** Group data changed in the core; refetch it. */
@@ -35,6 +45,31 @@ type Naming =
   | { kind: 'create'; movePath?: string }
   | { kind: 'rename'; group: ProjectGroup }
   | { kind: 'renameProject'; project: Project };
+
+/** Paused sessions (open when Otto last quit), shared with every row of the tree. */
+interface Paused {
+  sessions: SavedSession[];
+  /** Project paths in this workspace; a paused session elsewhere shows under General. */
+  known: Set<string>;
+  resume: (id: string) => void;
+  dismiss: (id: string) => void;
+}
+
+const PausedContext = createContext<Paused>({
+  sessions: [],
+  known: new Set(),
+  resume: () => undefined,
+  dismiss: () => undefined,
+});
+
+/** Paused sessions that belong under `projectPath` (`undefined` = General, and Ask). */
+function usePausedIn(projectPath: string | undefined): SavedSession[] {
+  const { sessions, known } = useContext(PausedContext);
+  return sessions.filter((s) => {
+    const inProject = s.kind === 'work' && s.projectPath !== null && known.has(s.projectPath);
+    return projectPath === undefined ? !inProject : inProject && s.projectPath === projectPath;
+  });
+}
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : 'That didn’t work.');
 
@@ -53,15 +88,24 @@ export function ProjectTree({
   onSetProject,
   onNewSession,
   onResume,
+  onResumePaused,
+  onDismissPaused,
   onImport,
   onChanged,
   onError,
 }: ProjectTreeProps) {
+  const pausedQuery = usePausedSessions(workspace.id);
   const { collapsed, toggleCollapsed } = useWorkspaceUi();
   const [naming, setNaming] = useState<Naming | null>(null);
   const ws = workspace.id;
 
   const known = new Set(projects.map((p) => p.path));
+  const paused: Paused = {
+    sessions: pausedQuery.data ?? [],
+    known,
+    resume: onResumePaused,
+    dismiss: onDismissPaused,
+  };
   const sessionsIn = (path: string | undefined) =>
     sessions.filter((s) =>
       path === undefined
@@ -125,94 +169,29 @@ export function ProjectTree({
   );
 
   return (
-    <div className={styles.tree}>
-      {groups.map((g, i) => {
-        const inGroup = projects.filter((p) => p.groupId === g.id);
-        const open = !collapsed[`group:${g.id}`];
-        return (
-          <section key={g.id} className={styles.section} aria-label={g.name}>
-            <div className={styles.sectionHeader}>
-              <button
-                type="button"
-                className={styles.sectionToggle}
-                aria-expanded={open}
-                onClick={() => {
-                  toggleCollapsed(`group:${g.id}`);
-                }}
-              >
-                {g.name}
-              </button>
-              <AddToGroup
-                group={g}
-                projects={projects}
-                groups={groups}
-                variant="icon"
-                onMove={(path) => {
-                  run(() => groupActions.moveProject(ws, path, g.id));
-                }}
-                onImport={() => {
-                  onImport(g);
-                }}
-              />
-              <Menu.Root>
-                <Menu.Trigger className={styles.moreButton} aria-label={`${g.name} options`}>
-                  ···
-                </Menu.Trigger>
-                <Menu.Portal>
-                  <Menu.Content className={menu.menu} side="bottom" align="end" sideOffset={4}>
-                    <Menu.Item
-                      className={menu.item}
-                      onSelect={() => {
-                        setNaming({ kind: 'rename', group: g });
-                      }}
-                    >
-                      Rename…
-                    </Menu.Item>
-                    {i > 0 ? (
-                      <Menu.Item
-                        className={menu.item}
-                        onSelect={() => {
-                          moveGroup(i, -1);
-                        }}
-                      >
-                        Move up
-                      </Menu.Item>
-                    ) : null}
-                    {i < groups.length - 1 ? (
-                      <Menu.Item
-                        className={menu.item}
-                        onSelect={() => {
-                          moveGroup(i, 1);
-                        }}
-                      >
-                        Move down
-                      </Menu.Item>
-                    ) : null}
-                    <Menu.Separator className={styles.menuSeparator} />
-                    <Menu.Item
-                      className={menu.item}
-                      onSelect={() => {
-                        run(() => groupActions.remove(ws, g.id));
-                      }}
-                    >
-                      <span className={menu.text}>
-                        <span>Delete group</span>
-                        <span className={menu.detail}>Its projects stay in {workspace.name}</span>
-                      </span>
-                    </Menu.Item>
-                  </Menu.Content>
-                </Menu.Portal>
-              </Menu.Root>
-            </div>
-            {open ? (
-              inGroup.length > 0 ? (
-                <ul className={styles.list}>{inGroup.map(projectNode)}</ul>
-              ) : (
+    <PausedContext.Provider value={paused}>
+      <div className={styles.tree}>
+        {groups.map((g, i) => {
+          const inGroup = projects.filter((p) => p.groupId === g.id);
+          const open = !collapsed[`group:${g.id}`];
+          return (
+            <section key={g.id} className={styles.section} aria-label={g.name}>
+              <div className={styles.sectionHeader}>
+                <button
+                  type="button"
+                  className={styles.sectionToggle}
+                  aria-expanded={open}
+                  onClick={() => {
+                    toggleCollapsed(`group:${g.id}`);
+                  }}
+                >
+                  {g.name}
+                </button>
                 <AddToGroup
                   group={g}
                   projects={projects}
                   groups={groups}
-                  variant="row"
+                  variant="icon"
                   onMove={(path) => {
                     run(() => groupActions.moveProject(ws, path, g.id));
                   }}
@@ -220,118 +199,188 @@ export function ProjectTree({
                     onImport(g);
                   }}
                 />
-              )
+                <Menu.Root>
+                  <Menu.Trigger className={styles.moreButton} aria-label={`${g.name} options`}>
+                    ···
+                  </Menu.Trigger>
+                  <Menu.Portal>
+                    <Menu.Content className={menu.menu} side="bottom" align="end" sideOffset={4}>
+                      <Menu.Item
+                        className={menu.item}
+                        onSelect={() => {
+                          setNaming({ kind: 'rename', group: g });
+                        }}
+                      >
+                        Rename…
+                      </Menu.Item>
+                      {i > 0 ? (
+                        <Menu.Item
+                          className={menu.item}
+                          onSelect={() => {
+                            moveGroup(i, -1);
+                          }}
+                        >
+                          Move up
+                        </Menu.Item>
+                      ) : null}
+                      {i < groups.length - 1 ? (
+                        <Menu.Item
+                          className={menu.item}
+                          onSelect={() => {
+                            moveGroup(i, 1);
+                          }}
+                        >
+                          Move down
+                        </Menu.Item>
+                      ) : null}
+                      <Menu.Separator className={styles.menuSeparator} />
+                      <Menu.Item
+                        className={menu.item}
+                        onSelect={() => {
+                          run(() => groupActions.remove(ws, g.id));
+                        }}
+                      >
+                        <span className={menu.text}>
+                          <span>Delete group</span>
+                          <span className={menu.detail}>Its projects stay in {workspace.name}</span>
+                        </span>
+                      </Menu.Item>
+                    </Menu.Content>
+                  </Menu.Portal>
+                </Menu.Root>
+              </div>
+              {open ? (
+                inGroup.length > 0 ? (
+                  <ul className={styles.list}>{inGroup.map(projectNode)}</ul>
+                ) : (
+                  <AddToGroup
+                    group={g}
+                    projects={projects}
+                    groups={groups}
+                    variant="row"
+                    onMove={(path) => {
+                      run(() => groupActions.moveProject(ws, path, g.id));
+                    }}
+                    onImport={() => {
+                      onImport(g);
+                    }}
+                  />
+                )
+              ) : null}
+            </section>
+          );
+        })}
+
+        {ungrouped.length > 0 || groups.length === 0 ? (
+          <section className={styles.section} aria-label="Projects">
+            <div className={styles.sectionHeader}>
+              <span className={styles.sectionLabel}>
+                {groups.length > 0 ? 'Other projects' : 'Projects'}
+              </span>
+            </div>
+            {ungrouped.length > 0 ? (
+              <ul className={styles.list}>{ungrouped.map(projectNode)}</ul>
             ) : null}
           </section>
-        );
-      })}
+        ) : null}
 
-      {ungrouped.length > 0 || groups.length === 0 ? (
-        <section className={styles.section} aria-label="Projects">
-          <div className={styles.sectionHeader}>
-            <span className={styles.sectionLabel}>
-              {groups.length > 0 ? 'Other projects' : 'Projects'}
-            </span>
-          </div>
-          {ungrouped.length > 0 ? (
-            <ul className={styles.list}>{ungrouped.map(projectNode)}</ul>
-          ) : null}
+        <ul className={styles.list} aria-label="Add">
+          <li>
+            <button
+              type="button"
+              className={styles.addRow}
+              onClick={() => {
+                onImport();
+              }}
+            >
+              <span className={styles.addIcon} aria-hidden>
+                +
+              </span>
+              Import projects…
+            </button>
+          </li>
+          <li>
+            <button
+              type="button"
+              className={styles.addRow}
+              onClick={() => {
+                setNaming({ kind: 'create' });
+              }}
+            >
+              <span className={styles.addIcon} aria-hidden>
+                +
+              </span>
+              New group…
+            </button>
+          </li>
+        </ul>
+
+        <section className={styles.section} aria-label="General">
+          <ul className={styles.list}>
+            <GeneralNode
+              workspace={workspace}
+              sessions={sessionsIn(undefined)}
+              activeSessionId={activeSessionId}
+              current={currentProjectPath === undefined}
+              onSelect={() => {
+                onSetProject(undefined);
+              }}
+              onSelectSession={onSelectSession}
+              onNewSession={(agent) => {
+                onSetProject(undefined);
+                onNewSession(agent, undefined);
+              }}
+              onResume={(id) => {
+                onSetProject(undefined);
+                onResume(id, undefined);
+              }}
+            />
+          </ul>
         </section>
-      ) : null}
 
-      <ul className={styles.list} aria-label="Add">
-        <li>
-          <button
-            type="button"
-            className={styles.addRow}
-            onClick={() => {
-              onImport();
+        {naming?.kind === 'renameProject' ? (
+          <NameDialog
+            title="Rename project"
+            description={`Shown in Otto only. The folder stays ${naming.project.folderName}.`}
+            label="Project name"
+            initial={naming.project.name}
+            submitLabel="Rename"
+            onClose={() => {
+              setNaming(null);
             }}
-          >
-            <span className={styles.addIcon} aria-hidden>
-              +
-            </span>
-            Import projects…
-          </button>
-        </li>
-        <li>
-          <button
-            type="button"
-            className={styles.addRow}
-            onClick={() => {
-              setNaming({ kind: 'create' });
-            }}
-          >
-            <span className={styles.addIcon} aria-hidden>
-              +
-            </span>
-            New group…
-          </button>
-        </li>
-      </ul>
-
-      <section className={styles.section} aria-label="General">
-        <ul className={styles.list}>
-          <GeneralNode
-            workspace={workspace}
-            sessions={sessionsIn(undefined)}
-            activeSessionId={activeSessionId}
-            current={currentProjectPath === undefined}
-            onSelect={() => {
-              onSetProject(undefined);
-            }}
-            onSelectSession={onSelectSession}
-            onNewSession={(agent) => {
-              onSetProject(undefined);
-              onNewSession(agent, undefined);
-            }}
-            onResume={(id) => {
-              onSetProject(undefined);
-              onResume(id, undefined);
+            onSubmit={async (name) => {
+              await groupActions.renameProject(ws, naming.project.path, name);
+              onChanged();
             }}
           />
-        </ul>
-      </section>
-
-      {naming?.kind === 'renameProject' ? (
-        <NameDialog
-          title="Rename project"
-          description={`Shown in Otto only. The folder stays ${naming.project.folderName}.`}
-          label="Project name"
-          initial={naming.project.name}
-          submitLabel="Rename"
-          onClose={() => {
-            setNaming(null);
-          }}
-          onSubmit={async (name) => {
-            await groupActions.renameProject(ws, naming.project.path, name);
-            onChanged();
-          }}
-        />
-      ) : naming ? (
-        <NameDialog
-          title={naming.kind === 'rename' ? 'Rename group' : `New group in ${workspace.name}`}
-          {...(naming.kind === 'create'
-            ? { description: 'Groups sort projects inside this workspace, like Clients or Studio.' }
-            : {})}
-          label="Group name"
-          initial={naming.kind === 'rename' ? naming.group.name : ''}
-          submitLabel={naming.kind === 'rename' ? 'Rename' : 'Create group'}
-          onClose={() => {
-            setNaming(null);
-          }}
-          onSubmit={async (name) => {
-            if (naming.kind === 'rename') {
-              await groupActions.rename(ws, naming.group.id, name);
-            } else {
-              const group = await groupActions.create(ws, name);
-              if (naming.movePath) await groupActions.moveProject(ws, naming.movePath, group.id);
-            }
-            onChanged();
-          }}
-        />
-      ) : null}
-    </div>
+        ) : naming ? (
+          <NameDialog
+            title={naming.kind === 'rename' ? 'Rename group' : `New group in ${workspace.name}`}
+            {...(naming.kind === 'create'
+              ? {
+                  description:
+                    'Groups sort projects inside this workspace, like Clients or Studio.',
+                }
+              : {})}
+            label="Group name"
+            initial={naming.kind === 'rename' ? naming.group.name : ''}
+            submitLabel={naming.kind === 'rename' ? 'Rename' : 'Create group'}
+            onClose={() => {
+              setNaming(null);
+            }}
+            onSubmit={async (name) => {
+              if (naming.kind === 'rename') {
+                await groupActions.rename(ws, naming.group.id, name);
+              } else {
+                const group = await groupActions.create(ws, name);
+                if (naming.movePath) await groupActions.moveProject(ws, naming.movePath, group.id);
+              }
+              onChanged();
+            }}
+          />
+        ) : null}
+      </div>
+    </PausedContext.Provider>
   );
 }
 
@@ -371,7 +420,8 @@ function ProjectNode({
   onRename,
 }: ProjectNodeProps) {
   const past = useEarlier(workspace.id, p.path, sessions);
-  const hasChildren = sessions.length > 0 || past.length > 0;
+  const pausedHere = usePausedIn(p.path);
+  const hasChildren = sessions.length > 0 || pausedHere.length > 0 || past.length > 0;
   return (
     <li>
       <div className={styles.projectRow} data-current={current ? 'true' : undefined}>
@@ -451,6 +501,7 @@ function ProjectNode({
       {expanded && hasChildren ? (
         <SessionList
           sessions={sessions}
+          paused={pausedHere}
           past={past}
           activeSessionId={activeSessionId}
           onSelectSession={onSelectSession}
@@ -484,6 +535,7 @@ function GeneralNode({
   onResume,
 }: GeneralNodeProps) {
   const past = useEarlier(workspace.id, undefined, sessions);
+  const pausedHere = usePausedIn(undefined);
   return (
     <li>
       <div className={styles.projectRow} data-current={current ? 'true' : undefined}>
@@ -505,9 +557,10 @@ function GeneralNode({
           />
         </span>
       </div>
-      {sessions.length > 0 || past.length > 0 ? (
+      {sessions.length > 0 || pausedHere.length > 0 || past.length > 0 ? (
         <SessionList
           sessions={sessions}
+          paused={pausedHere}
           past={past}
           activeSessionId={activeSessionId}
           onSelectSession={onSelectSession}
@@ -525,26 +578,38 @@ function useEarlier(
   live: LiveSession[],
 ): PastConversation[] {
   const past = usePastConversations(workspaceId, projectPath);
-  const open = new Set(live.map((s) => s.info.id));
+  const { sessions: paused } = useContext(PausedContext);
+  const open = new Set([...live.map((s) => s.info.id), ...paused.map((s) => s.id)]);
   return (past.data ?? []).filter((c) => !open.has(c.id));
 }
 
 const EARLIER_SHOWN = 3;
 
+/** What a session row says besides its name. Colour is never the only signal. */
+function statusLabel(s: LiveSession): string | null {
+  if (s.exit !== undefined) return 'Ended';
+  if (s.status === 'running') return 'Working';
+  if (s.status === 'waiting') return 'Needs you';
+  return null;
+}
+
 function SessionList({
   sessions,
+  paused,
   past,
   activeSessionId,
   onSelectSession,
   onResume,
 }: {
   sessions: LiveSession[];
+  paused: SavedSession[];
   past: PastConversation[];
   activeSessionId: string | undefined;
   onSelectSession: (id: string) => void;
   onResume: (conversationId: string) => void;
 }) {
   const labels = sessionLabels(sessions);
+  const { resume, dismiss } = useContext(PausedContext);
   const [showAll, setShowAll] = useState(false);
   const earlier = showAll ? past : past.slice(0, EARLIER_SHOWN);
   return (
@@ -561,11 +626,43 @@ function SessionList({
           >
             <span
               className={styles.sessionState}
-              data-state={s.exit === undefined ? 'running' : 'done'}
-              aria-label={s.exit === undefined ? 'Running' : 'Ended'}
-              role="img"
+              data-state={s.exit === undefined ? s.status : 'done'}
+              aria-hidden
             />
             <span className={styles.rowName}>{labels.get(s.info.id)}</span>
+            {statusLabel(s) ? (
+              <span className={styles.statusLabel} data-state={s.status}>
+                {statusLabel(s)}
+              </span>
+            ) : null}
+          </button>
+        </li>
+      ))}
+      {paused.map((s) => (
+        <li key={s.id} className={styles.pausedItem}>
+          <button
+            type="button"
+            className={styles.row}
+            data-paused="true"
+            title={`Resume “${s.title}” where it left off`}
+            onClick={() => {
+              resume(s.id);
+            }}
+          >
+            <span className={styles.pausedState} aria-hidden />
+            <span className={styles.rowName}>{s.title}</span>
+            <span className={styles.statusLabel}>Paused</span>
+          </button>
+          <button
+            type="button"
+            className={styles.dismiss}
+            aria-label={`Forget paused ${s.title}`}
+            title="Forget this paused session"
+            onClick={() => {
+              dismiss(s.id);
+            }}
+          >
+            ×
           </button>
         </li>
       ))}

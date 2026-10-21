@@ -368,8 +368,88 @@
   background: var(--otto-color-border-strong);
 }
 
+.sessionState[data-state='idle'] {
+  background: var(--otto-accent);
+}
+
+/* Working: the dot breathes (still under Reduce Motion, via the duration token). */
 .sessionState[data-state='running'] {
   background: var(--otto-accent);
+  animation: breathe var(--otto-duration-slow) var(--otto-easing-standard) infinite alternate;
+}
+
+/* Needs you: a ring around the dot, plus the "Needs you" label. */
+.sessionState[data-state='waiting'] {
+  background: var(--otto-accent);
+  box-shadow: var(--otto-shadow-focus);
+}
+
+@keyframes breathe {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0.35;
+  }
+}
+
+.statusLabel {
+  flex-shrink: 0;
+  color: var(--otto-color-text-tertiary);
+  font-size: var(--otto-type-caption-size);
+}
+
+.statusLabel[data-state='waiting'] {
+  color: var(--otto-accent-text);
+  font-weight: var(--otto-type-headline-weight);
+}
+
+/* Paused: open when Otto last quit. A hollow dot, and "Paused". */
+.pausedItem {
+  position: relative;
+}
+
+.pausedState {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border: 1px solid var(--otto-accent);
+  border-radius: var(--otto-radius-full);
+}
+
+.row[data-paused='true'] {
+  padding-right: var(--otto-space-6);
+  color: var(--otto-color-text-secondary);
+}
+
+.dismiss {
+  position: absolute;
+  top: var(--otto-space-1);
+  right: var(--otto-space-1);
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--otto-radius-xs);
+  background: transparent;
+  color: var(--otto-color-text-tertiary);
+  opacity: 0;
+}
+
+.dismiss:hover {
+  background: var(--otto-color-fill-selected);
+  color: var(--otto-color-text-primary);
+}
+
+.dismiss:focus-visible {
+  opacity: 1;
+}
+
+.pausedItem:hover .dismiss {
+  opacity: 1;
 }
 
 /* Earlier (closed) conversations: an open ring, quieter text, and when. */

@@ -12,6 +12,8 @@ Ideas for V2 and later. Nothing here gets built in V1. Newest first.
 - **Session rename** and drag-to-reorder for projects and groups.
 - **Links in notes open in the browser.** For now they show their address on hover but don't navigate, because that would replace Otto's window. Needs the Tauri opener plugin.
 - **Ask with Codex**, and listing past Ask conversations on the Knowledge page.
+- **Back up Knowledge off this Mac** (a private repo or iCloud). It's a privacy choice for Mike, because notes include equity and client details.
+- **Codex's package cache** (325 MB in Lauf) belongs to Codex; revisit if it keeps growing.
 - **Watch knowledge files live**, so edits made outside Otto refresh the list without reopening. For now they show on reopen, and agents get them on their next session.
 
 ## From SPEC §12 (2026-10-20)

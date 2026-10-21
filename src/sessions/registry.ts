@@ -8,6 +8,7 @@ import {
   type CommandError,
   type PtyEvent,
   type SessionInfo,
+  type SessionStatus,
 } from '../bindings';
 import { font, terminal as palette } from '../design/tokens';
 
@@ -21,6 +22,8 @@ export interface LiveSession {
   fit: FitAddon;
   /** Undefined while running; the exit code (or null for a signal) once it ends. */
   exit: number | null | undefined;
+  /** What the agent last reported through its hooks (M5a). Shells stay `idle`. */
+  status: SessionStatus;
 }
 
 interface SessionsState {
@@ -34,6 +37,10 @@ interface SessionsState {
   ) => Promise<LiveSession>;
   /** Ask: Claude Code over the workspace's knowledge and projects (SPEC §7.5). */
   openAsk: (workspaceId: string, includePrivate: boolean) => Promise<LiveSession>;
+  /** Pick up a session that was open when Otto last quit. */
+  resume: (workspaceId: string, id: string) => Promise<LiveSession>;
+  /** Apply a status an agent reported. Returns the session's previous status. */
+  setStatus: (id: string, status: SessionStatus) => SessionStatus | undefined;
   close: (id: string) => void;
   select: (workspaceId: string, id: string | undefined) => void;
   /** Called when a session ends (e.g. a sign-in flow finishes). */
@@ -99,7 +106,7 @@ export const useSessions = create<SessionsState>((set, get) => {
       void commands.resizeSession(id, cols, rows);
     });
 
-    const session: LiveSession = { info: result.data, term, fit, exit: undefined };
+    const session: LiveSession = { info: result.data, term, fit, exit: undefined, status: 'idle' };
     set((s) => ({
       sessions: [...s.sessions, session],
       activeByWorkspace: { ...s.activeByWorkspace, [workspaceId]: id },
@@ -129,6 +136,19 @@ export const useSessions = create<SessionsState>((set, get) => {
       attach(workspaceId, (channel) =>
         commands.openAsk(workspaceId, includePrivate, 100, 30, channel),
       ),
+
+    resume: (workspaceId, id) =>
+      attach(workspaceId, (channel) =>
+        commands.resumePausedSession(workspaceId, id, 100, 30, channel),
+      ),
+
+    setStatus: (id, status) => {
+      const before = get().sessions.find((s) => s.info.id === id)?.status;
+      set((s) => ({
+        sessions: s.sessions.map((x) => (x.info.id === id ? { ...x, status } : x)),
+      }));
+      return before;
+    },
 
     close: (id) => {
       const session = get().sessions.find((s) => s.info.id === id);

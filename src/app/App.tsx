@@ -13,8 +13,10 @@ import { TerminalView } from '../sessions/TerminalView';
 import { ClaudeSetup } from '../setup/ClaudeSetup';
 import { Sidebar } from '../sidebar/Sidebar';
 import { useWorkspaceUi, type WorkspacePage } from '../state/workspace';
+import { useAgentStatus } from './status';
 import styles from './App.module.css';
 import {
+  dismissPausedSession,
   FriendlyError,
   queryKeys,
   useAllDoctors,
@@ -64,7 +66,7 @@ export function App() {
   const doctor = useDoctor(active?.id);
   const queryClient = useQueryClient();
 
-  const { sessions, activeByWorkspace, open, openAsk, close, select } = useSessions();
+  const { sessions, activeByWorkspace, open, openAsk, resume, close, select } = useSessions();
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const activeSessionId = active ? activeByWorkspace[active.id] : undefined;
@@ -82,11 +84,14 @@ export function App() {
     });
   }, [queryClient]);
 
-  // A session opening or closing changes which earlier conversations to list.
+  // A session opening or closing changes which earlier and paused sessions to list.
   const sessionCount = sessions.length;
   useEffect(() => {
     void queryClient.invalidateQueries({ queryKey: ['past'] });
+    void queryClient.invalidateQueries({ queryKey: ['paused'] });
   }, [queryClient, sessionCount]);
+
+  useAgentStatus(list, projects.data ?? []);
 
   /**
    * Every caller says where the session runs: `projectPath`, or `undefined` for General.
@@ -332,6 +337,24 @@ export function App() {
         }}
         onResume={(resumeId, projectPath) => {
           void startSession(active.id, 'claude', { projectPath, resumeId });
+        }}
+        onResumePaused={(id) => {
+          setSessionError(null);
+          resume(active.id, id).catch((e: unknown) => {
+            setSessionError(
+              e instanceof SessionError ? e.message : 'Couldn’t resume that session.',
+            );
+          });
+        }}
+        onDismissPaused={(id) => {
+          dismissPausedSession(active.id, id).then(
+            () => queryClient.invalidateQueries({ queryKey: queryKeys.paused(active.id) }),
+            (e: unknown) => {
+              setSessionError(
+                e instanceof FriendlyError ? e.message : 'Couldn’t forget that session.',
+              );
+            },
+          );
         }}
         onImport={(group) => {
           setImportInto(group);

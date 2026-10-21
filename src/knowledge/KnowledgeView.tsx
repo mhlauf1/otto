@@ -10,16 +10,16 @@ import {
   useKnowledge,
   useKnowledgeImage,
   useNote,
-  useProjectDoc,
-  useProjectDocs,
 } from '../app/queries';
 import { NameDialog } from '../ui/NameDialog';
 import { Markdown } from './Markdown';
 import styles from './Knowledge.module.css';
 
-type Selection =
-  | { kind: 'note'; area: Area; path: string }
-  | { kind: 'doc'; projectPath: string; projectName: string; path: string };
+/** The open item: a note, About Mike, or an asset. */
+interface Selection {
+  area: Area;
+  path: string;
+}
 
 const AREA_LABEL: Record<Area, string> = {
   global: 'Shared',
@@ -53,9 +53,7 @@ export function KnowledgeView({ workspace, onAsk }: KnowledgeViewProps) {
   const ws = workspace.id;
   const queryClient = useQueryClient();
   const entries = useKnowledge(ws);
-  const docs = useProjectDocs(ws);
   const [selection, setSelection] = useState<Selection>({
-    kind: 'note',
     area: 'notes',
     path: 'Overview.md',
   });
@@ -67,11 +65,8 @@ export function KnowledgeView({ workspace, onAsk }: KnowledgeViewProps) {
   const list = entries.data ?? [];
   const inArea = (area: Area) => list.filter((e) => e.area === area);
   const isSelected = (area: Area, path: string) =>
-    selection.kind === 'note' && selection.area === area && selection.path === path;
-  const selectedEntry =
-    selection.kind === 'note'
-      ? list.find((e) => e.area === selection.area && e.path === selection.path)
-      : undefined;
+    selection.area === area && selection.path === path;
+  const selectedEntry = list.find((e) => e.area === selection.area && e.path === selection.path);
 
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.knowledge(ws), exact: true });
@@ -90,7 +85,7 @@ export function KnowledgeView({ workspace, onAsk }: KnowledgeViewProps) {
       const added = await knowledgeActions.addAssets(ws, files);
       refresh();
       const first = added[0];
-      if (first) setSelection({ kind: 'note', area: 'assets', path: first });
+      if (first) setSelection({ area: 'assets', path: first });
     } catch (e) {
       setError(errorText(e));
     }
@@ -104,7 +99,7 @@ export function KnowledgeView({ workspace, onAsk }: KnowledgeViewProps) {
         aria-current={isSelected(e.area, e.path) ? 'true' : undefined}
         onClick={() => {
           setStartEditing(false);
-          setSelection({ kind: 'note', area: e.area, path: e.path });
+          setSelection({ area: e.area, path: e.path });
         }}
       >
         <span className={styles.itemTitle}>
@@ -171,44 +166,6 @@ export function KnowledgeView({ workspace, onAsk }: KnowledgeViewProps) {
             ) : null}
           </ListSection>
 
-          {(docs.data ?? []).length > 0 ? (
-            <ListSection label="From your projects" hint="Read-only, straight from each repo">
-              {(docs.data ?? []).map((p) => (
-                <details key={p.projectPath} className={styles.project} open>
-                  <summary className={styles.projectName}>{p.projectName}</summary>
-                  <ul className={styles.items}>
-                    {p.docs.map((d) => (
-                      <li key={d.path}>
-                        <button
-                          type="button"
-                          className={styles.item}
-                          aria-current={
-                            selection.kind === 'doc' &&
-                            selection.projectPath === p.projectPath &&
-                            selection.path === d.path
-                              ? 'true'
-                              : undefined
-                          }
-                          onClick={() => {
-                            setSelection({
-                              kind: 'doc',
-                              projectPath: p.projectPath,
-                              projectName: p.projectName,
-                              path: d.path,
-                            });
-                          }}
-                        >
-                          <span className={styles.itemTitle}>{d.title}</span>
-                          <span className={styles.itemSummary}>{d.path}</span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              ))}
-            </ListSection>
-          ) : null}
-
           <ListSection
             label="Assets"
             onAdd={isTauri() ? () => void addImages() : undefined}
@@ -245,9 +202,7 @@ export function KnowledgeView({ workspace, onAsk }: KnowledgeViewProps) {
       </aside>
 
       <article className={styles.reader}>
-        {selection.kind === 'doc' ? (
-          <DocReader key={`${selection.projectPath}:${selection.path}`} ws={ws} {...selection} />
-        ) : selection.area === 'assets' ? (
+        {selection.area === 'assets' ? (
           <AssetViewer key={selection.path} ws={ws} path={selection.path} />
         ) : (
           <NoteEditor
@@ -279,7 +234,7 @@ export function KnowledgeView({ workspace, onAsk }: KnowledgeViewProps) {
             const path = await knowledgeActions.create(ws, creating, title);
             refresh();
             setStartEditing(true);
-            setSelection({ kind: 'note', area: creating, path });
+            setSelection({ area: creating, path });
           }}
         />
       ) : null}
@@ -453,43 +408,6 @@ function NoteEditor({
       ) : (
         <div className={styles.readerBody}>
           <Markdown text={text} source={{ workspaceId: ws, area, path }} />
-        </div>
-      )}
-    </>
-  );
-}
-
-function DocReader({
-  ws,
-  projectPath,
-  projectName,
-  path,
-}: {
-  ws: string;
-  projectPath: string;
-  projectName: string;
-  path: string;
-}) {
-  const doc = useProjectDoc(ws, projectPath, path);
-  return (
-    <>
-      <div className={styles.readerHeader}>
-        <h2 className={styles.crumbs}>
-          <span className={styles.crumbArea}>{projectName}</span>
-          <span className={styles.crumbSep} aria-hidden>
-            /
-          </span>
-          {path}
-        </h2>
-        <span className={styles.badge}>Read-only, from the repo</span>
-      </div>
-      {doc.isError ? (
-        <p className={styles.error} role="alert">
-          {doc.error instanceof FriendlyError ? doc.error.message : 'Couldn’t open this doc.'}
-        </p>
-      ) : (
-        <div className={styles.readerBody}>
-          <Markdown text={doc.data ?? ''} />
         </div>
       )}
     </>

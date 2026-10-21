@@ -6,6 +6,7 @@ use std::str::FromStr;
 use sqlx::Row;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePool, SqlitePoolOptions};
 
+use crate::agent::AgentKind;
 use crate::repo::VerifiedRepo;
 
 /// A project registered to a workspace.
@@ -29,6 +30,61 @@ pub struct ProjectGroup {
     pub id: String,
     pub name: String,
 }
+
+/// What a saved session was opened for, so a paused one resumes the same way.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum SessionKind {
+    Work,
+    /// Ask over the workspace's knowledge (SPEC §7.5).
+    Ask,
+    /// Ask with private notes included.
+    AskPrivate,
+}
+
+/// What the agent is doing, as reported by its own hooks (M5a).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum SessionStatus {
+    /// Waiting for Mike's next prompt.
+    Idle,
+    Running,
+    /// Needs Mike: a permission prompt or a question.
+    Waiting,
+    /// The program ended.
+    Exited,
+}
+
+/// A session Otto remembers across launches.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SavedSession {
+    pub id: String,
+    pub workspace_id: String,
+    pub agent: AgentKind,
+    pub project_path: Option<String>,
+    pub title: String,
+    pub kind: SessionKind,
+    /// Codex's own thread ID, once known; Claude uses `id`.
+    pub cli_session_id: Option<String>,
+    pub status: SessionStatus,
+    pub last_active_at: String,
+}
+
+fn enum_str<T: serde::Serialize>(value: T) -> String {
+    serde_json::to_value(value)
+        .ok()
+        .and_then(|v| v.as_str().map(str::to_owned))
+        .unwrap_or_default()
+}
+
+fn enum_parse<T: serde::de::DeserializeOwned>(text: &str) -> Result<T, StoreError> {
+    serde_json::from_value(serde_json::Value::String(text.to_owned()))
+        .map_err(|_| StoreError::Corrupt(format!("unknown value {text}")))
+}
+
+/// Closed sessions are forgotten after this many days.
+const KEEP_CLOSED_DAYS: i64 = 30;
 
 /// Starter groups per workspace. Ids match migration 0004, which adds them to
 /// installs that already existed.
@@ -421,6 +477,163 @@ impl Store {
         Ok(())
     }
 
+    /// Remember a session as open (again, if it's being resumed).
+    ///
+    /// # Errors
+    /// Fails on database errors.
+    pub async fn save_session(&self, session: &SavedSession) -> Result<(), StoreError> {
+        sqlx::query(
+            "INSERT INTO sessions (id, workspace_id, agent, project_path, title, kind, cli_session_id, status)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+             ON CONFLICT (id) DO UPDATE SET state = 'open', closed_at = NULL, status = ?8,
+               title = ?5, last_active_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+             WHERE sessions.workspace_id = ?2",
+        )
+        .bind(&session.id)
+        .bind(&session.workspace_id)
+        .bind(enum_str(session.agent))
+        .bind(&session.project_path)
+        .bind(&session.title)
+        .bind(enum_str(session.kind))
+        .bind(&session.cli_session_id)
+        .bind(enum_str(session.status))
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    /// One of `workspace`'s sessions. Another workspace's ID finds nothing.
+    ///
+    /// # Errors
+    /// Fails on database errors or an unreadable row.
+    pub async fn session(
+        &self,
+        workspace: &WorkspaceId,
+        id: &str,
+    ) -> Result<Option<SavedSession>, StoreError> {
+        let row = sqlx::query(
+            "SELECT id, workspace_id, agent, project_path, title, kind, cli_session_id, status, last_active_at
+             FROM sessions WHERE id = ?1 AND workspace_id = ?2",
+        )
+        .bind(id)
+        .bind(workspace.as_str())
+        .fetch_optional(&self.pool)
+        .await?;
+        row.as_ref().map(saved_session).transpose()
+    }
+
+    /// Sessions still open, oldest first: after a relaunch these come back paused.
+    ///
+    /// # Errors
+    /// Fails on database errors or an unreadable row.
+    pub async fn open_sessions(
+        &self,
+        workspace: &WorkspaceId,
+    ) -> Result<Vec<SavedSession>, StoreError> {
+        let rows = sqlx::query(
+            "SELECT id, workspace_id, agent, project_path, title, kind, cli_session_id, status, last_active_at
+             FROM sessions WHERE workspace_id = ?1 AND state = 'open' ORDER BY created_at",
+        )
+        .bind(workspace.as_str())
+        .fetch_all(&self.pool)
+        .await?;
+        rows.iter().map(saved_session).collect()
+    }
+
+    /// Record what a session is doing. Returns `false` (and changes nothing) for an ID that
+    /// isn't one of `workspace`'s open sessions.
+    ///
+    /// # Errors
+    /// Fails on database errors.
+    pub async fn set_session_status(
+        &self,
+        workspace: &WorkspaceId,
+        id: &str,
+        status: SessionStatus,
+    ) -> Result<bool, StoreError> {
+        let done = sqlx::query(
+            "UPDATE sessions SET status = ?1, last_active_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+             WHERE id = ?2 AND workspace_id = ?3 AND state = 'open'",
+        )
+        .bind(enum_str(status))
+        .bind(id)
+        .bind(workspace.as_str())
+        .execute(&self.pool)
+        .await?;
+        Ok(done.rows_affected() > 0)
+    }
+
+    /// Remember the CLI's own session ID (Codex's thread), for resuming later.
+    ///
+    /// # Errors
+    /// Fails on database errors.
+    pub async fn set_cli_session_id(
+        &self,
+        workspace: &WorkspaceId,
+        id: &str,
+        cli_session_id: &str,
+    ) -> Result<bool, StoreError> {
+        let done = sqlx::query(
+            "UPDATE sessions SET cli_session_id = ?1 WHERE id = ?2 AND workspace_id = ?3",
+        )
+        .bind(cli_session_id)
+        .bind(id)
+        .bind(workspace.as_str())
+        .execute(&self.pool)
+        .await?;
+        Ok(done.rows_affected() > 0)
+    }
+
+    /// Mark a session closed (Mike closed it, or its program exited). It no longer comes
+    /// back on relaunch; Claude conversations stay resumable from the project's history.
+    ///
+    /// # Errors
+    /// Fails on database errors.
+    pub async fn close_saved_session(&self, id: &str) -> Result<(), StoreError> {
+        sqlx::query(
+            "UPDATE sessions SET state = 'closed', status = 'exited',
+               closed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+             WHERE id = ?1 AND state = 'open'",
+        )
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    /// Forget sessions closed more than 30 days ago. Returns how many were removed.
+    ///
+    /// # Errors
+    /// Fails on database errors.
+    pub async fn prune_closed_sessions(&self) -> Result<u64, StoreError> {
+        let done = sqlx::query(
+            "DELETE FROM sessions WHERE state = 'closed'
+               AND closed_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?1)",
+        )
+        .bind(format!("-{KEEP_CLOSED_DAYS} days"))
+        .execute(&self.pool)
+        .await?;
+        Ok(done.rows_affected())
+    }
+
+    /// The most recent audit detail of `kind` for a workspace, to skip logging repeats.
+    ///
+    /// # Errors
+    /// Fails on database errors.
+    pub async fn last_event_detail(
+        &self,
+        workspace: &WorkspaceId,
+        kind: &str,
+    ) -> Result<Option<String>, StoreError> {
+        Ok(sqlx::query_scalar(
+            "SELECT detail FROM events WHERE workspace_id = ?1 AND kind = ?2 ORDER BY id DESC LIMIT 1",
+        )
+        .bind(workspace.as_str())
+        .bind(kind)
+        .fetch_optional(&self.pool)
+        .await?)
+    }
+
     /// Append to the audit log.
     ///
     /// # Errors
@@ -450,6 +663,20 @@ impl Store {
                 .await?,
         )
     }
+}
+
+fn saved_session(r: &sqlx::sqlite::SqliteRow) -> Result<SavedSession, StoreError> {
+    Ok(SavedSession {
+        id: r.get("id"),
+        workspace_id: r.get("workspace_id"),
+        agent: enum_parse(r.get("agent"))?,
+        project_path: r.get("project_path"),
+        title: r.get("title"),
+        kind: enum_parse(r.get("kind"))?,
+        cli_session_id: r.get("cli_session_id"),
+        status: enum_parse(r.get("status"))?,
+        last_active_at: r.get("last_active_at"),
+    })
 }
 
 fn group_name(name: &str) -> Result<String, StoreError> {
@@ -617,7 +844,7 @@ mod tests {
         let (dir, store) = store_with_repo("/stoc", "lauf").await;
         for sql in [
             "DELETE FROM project_groups",
-            "DELETE FROM _sqlx_migrations WHERE version >= 4",
+            "DELETE FROM _sqlx_migrations WHERE version IN (4, 5)",
             "CREATE TABLE repos_old AS SELECT id, workspace_id, path, remote_url, verified_at FROM repos",
             "DROP TABLE repos",
             "DROP TABLE project_groups",
@@ -732,6 +959,69 @@ mod tests {
                 .await
                 .is_err()
         );
+    }
+
+    fn saved(id: &str, workspace: &str) -> SavedSession {
+        SavedSession {
+            id: id.into(),
+            workspace_id: workspace.into(),
+            agent: AgentKind::Claude,
+            project_path: Some("/stoc".into()),
+            title: "Claude Code".into(),
+            kind: SessionKind::Work,
+            cli_session_id: None,
+            status: SessionStatus::Idle,
+            last_active_at: String::new(),
+        }
+    }
+
+    #[tokio::test]
+    async fn open_sessions_survive_until_closed_and_reopen_on_resume() {
+        let (_dir, store) = temp_store().await;
+        store.seed_defaults().await.unwrap();
+        store.save_session(&saved("a", "lauf")).await.unwrap();
+        store.save_session(&saved("b", "lauf")).await.unwrap();
+        assert!(
+            store
+                .set_session_status(&ws("lauf"), "a", SessionStatus::Waiting)
+                .await
+                .unwrap()
+        );
+        let open = store.open_sessions(&ws("lauf")).await.unwrap();
+        assert_eq!(
+            open.iter().map(|s| s.id.as_str()).collect::<Vec<_>>(),
+            ["a", "b"]
+        );
+        assert_eq!(open[0].status, SessionStatus::Waiting);
+        assert_eq!(open[0].agent, AgentKind::Claude);
+
+        store.close_saved_session("a").await.unwrap();
+        assert_eq!(store.open_sessions(&ws("lauf")).await.unwrap().len(), 1);
+        // A closed session can't be updated, but resuming reopens it.
+        assert!(
+            !store
+                .set_session_status(&ws("lauf"), "a", SessionStatus::Running)
+                .await
+                .unwrap()
+        );
+        store.save_session(&saved("a", "lauf")).await.unwrap();
+        assert_eq!(store.open_sessions(&ws("lauf")).await.unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn old_closed_sessions_are_pruned() {
+        let (_dir, store) = temp_store().await;
+        store.seed_defaults().await.unwrap();
+        store.save_session(&saved("old", "lauf")).await.unwrap();
+        store.save_session(&saved("new", "lauf")).await.unwrap();
+        store.close_saved_session("old").await.unwrap();
+        store.close_saved_session("new").await.unwrap();
+        sqlx::query("UPDATE sessions SET closed_at = '2026-01-01T00:00:00.000Z' WHERE id = 'old'")
+            .execute(&store.pool)
+            .await
+            .unwrap();
+        assert_eq!(store.prune_closed_sessions().await.unwrap(), 1);
+        assert!(store.session(&ws("lauf"), "new").await.unwrap().is_some());
     }
 
     #[tokio::test]

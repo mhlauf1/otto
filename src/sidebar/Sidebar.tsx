@@ -27,6 +27,8 @@ interface SidebarProps {
   onSetProject: (path: string | undefined) => void;
   onNewSession: (agent: AgentKind, projectPath: string | undefined) => void;
   onResume: (conversationId: string, projectPath: string | undefined) => void;
+  onResumePaused: (id: string) => void;
+  onDismissPaused: (id: string) => void;
   onImport: (group?: ProjectGroup) => void;
   onGroupsChanged: () => void;
   onError: (message: string) => void;
@@ -94,6 +96,8 @@ export function Sidebar(props: SidebarProps) {
           onSetProject={props.onSetProject}
           onNewSession={props.onNewSession}
           onResume={props.onResume}
+          onResumePaused={props.onResumePaused}
+          onDismissPaused={props.onDismissPaused}
           onImport={props.onImport}
           onChanged={props.onGroupsChanged}
           onError={props.onError}

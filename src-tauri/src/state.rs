@@ -16,6 +16,8 @@ pub const DATA_FOLDER: &str = if cfg!(debug_assertions) {
 };
 
 pub struct AppState {
+    /// Set as Otto quits, so sessions it kills on the way out stay remembered (paused).
+    pub quitting: std::sync::Arc<std::sync::atomic::AtomicBool>,
     pub paths: OttoPaths,
     pub knowledge: KnowledgePaths,
     pub host: HostEnv,
@@ -59,8 +61,23 @@ impl AppState {
             provision(&ws, &layout)?;
             knowledge::seed(&knowledge, &ws)?;
             knowledge::write_instructions(&knowledge, &ws, &layout)?;
+            match otto_core::housekeeping::prune_stray_claude_versions(&layout, &host) {
+                Ok(0) => {}
+                Ok(bytes) => {
+                    tracing::info!(workspace = %ws.id, mb = bytes / 1_000_000, "removed unused Claude downloads");
+                }
+                Err(err) => {
+                    tracing::warn!(workspace = %ws.id, %err, "couldn't remove unused Claude downloads");
+                }
+            }
+        }
+        match store.prune_closed_sessions().await {
+            Ok(0) => {}
+            Ok(n) => tracing::info!(n, "forgot old closed sessions"),
+            Err(err) => tracing::warn!(%err, "couldn't prune old sessions"),
         }
         Ok(Self {
+            quitting: std::sync::Arc::default(),
             paths,
             knowledge,
             host,

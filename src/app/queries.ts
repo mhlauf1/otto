@@ -5,7 +5,7 @@ import {
   type AppInfo,
   type Area,
   type KnowledgeEntry,
-  type ProjectDocs,
+  type SavedSession,
   type DiscoveredRepo,
   type DoctorReport,
   type PastConversation,
@@ -18,7 +18,7 @@ import {
   PREVIEW_KNOWLEDGE,
   PREVIEW_NOTES,
   PREVIEW_PAST,
-  PREVIEW_PROJECT_DOCS,
+  PREVIEW_PAUSED,
   PREVIEW_PROJECTS,
   PREVIEW_WORKSPACES,
 } from './preview';
@@ -50,12 +50,10 @@ export const queryKeys = {
   past: (workspaceId: string) => ['past', workspaceId] as const,
   pastIn: (workspaceId: string, projectPath: string | undefined) =>
     ['past', workspaceId, projectPath ?? ''] as const,
+  paused: (workspaceId: string) => ['paused', workspaceId] as const,
   knowledge: (workspaceId: string) => ['knowledge', workspaceId] as const,
   note: (workspaceId: string, area: Area, path: string) =>
     ['knowledge', workspaceId, 'note', area, path] as const,
-  projectDocs: (workspaceId: string) => ['knowledge', workspaceId, 'projectDocs'] as const,
-  projectDoc: (workspaceId: string, projectPath: string, path: string) =>
-    ['knowledge', workspaceId, 'projectDoc', projectPath, path] as const,
   image: (workspaceId: string, area: Area, path: string) =>
     ['knowledge', workspaceId, 'image', area, path] as const,
   discovered: ['discovered'] as const,
@@ -137,6 +135,21 @@ export function usePastConversations(workspaceId: string, projectPath: string | 
   });
 }
 
+/** Sessions open when Otto last quit, not running now: shown paused, resumed on click. */
+export function usePausedSessions(workspaceId: string) {
+  return useQuery({
+    queryKey: queryKeys.paused(workspaceId),
+    queryFn: async (): Promise<SavedSession[]> =>
+      isTauri()
+        ? unwrap(await commands.listPausedSessions(workspaceId))
+        : (PREVIEW_PAUSED[workspaceId] ?? []),
+  });
+}
+
+export async function dismissPausedSession(workspaceId: string, id: string): Promise<void> {
+  unwrap(await commands.dismissPausedSession(workspaceId, id));
+}
+
 /** Notes, private notes, assets and About Mike for one workspace. */
 export function useKnowledge(workspaceId: string) {
   return useQuery({
@@ -159,26 +172,6 @@ export function useNote(workspaceId: string, area: Area, path: string | undefine
         ? unwrap(await commands.readNote(workspaceId, area, path))
         : (PREVIEW_NOTES[`${area}:${path}`] ?? `# ${path.replace(/\.md$/, '')}\n`);
     },
-  });
-}
-
-export function useProjectDocs(workspaceId: string) {
-  return useQuery({
-    queryKey: queryKeys.projectDocs(workspaceId),
-    queryFn: async (): Promise<ProjectDocs[]> =>
-      isTauri()
-        ? unwrap(await commands.listProjectDocs(workspaceId))
-        : (PREVIEW_PROJECT_DOCS[workspaceId] ?? []),
-  });
-}
-
-export function useProjectDoc(workspaceId: string, projectPath: string, path: string) {
-  return useQuery({
-    queryKey: queryKeys.projectDoc(workspaceId, projectPath, path),
-    queryFn: async (): Promise<string> =>
-      isTauri()
-        ? unwrap(await commands.readProjectDoc(workspaceId, projectPath, path))
-        : `# ${path}\n\nA project doc, shown read-only.\n`,
   });
 }
 
